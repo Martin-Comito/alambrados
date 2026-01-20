@@ -6,7 +6,7 @@ import io
 import urllib.parse
 from datetime import date
 
-# --- CONFIGURACIÓN DE PÁGINA ---
+# CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="Gestión Del Carmen - Sistema Integral", layout="wide")
 
 # Rutas de archivos
@@ -16,7 +16,7 @@ RECETAS_FILE = "recetas_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
 ENTREGAS_FILE = "entregas_del_carmen.csv"
 
-# --- INICIALIZACIÓN ---
+# INICIALIZACIÓN
 def inicializar_archivos():
     cols_stock = ["Producto", "Cantidad", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
     
@@ -57,11 +57,11 @@ def descargar_excel(df):
 
 inicializar_archivos()
 
-# --- INTERFAZ ---
+# INTERFAZ
 st.title("🏗️ Alambrados del Carmen S.A.")
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📋 Cotizador", "📦 Inventario", "📊 Análisis", "💰 Gastos", "⚒️ Fábrica", "🚚 Logística"])
 
-# --- TAB 1: COTIZADOR ---
+# TAB 1: COTIZADOR
 with tab1:
     st.header("Presupuesto y Venta")
     df_s = cargar_datos(STOCK_FILE)
@@ -140,30 +140,56 @@ with tab1:
 
     st.text_area("WhatsApp:", f"*Alambrados del Carmen*\nCliente: {cliente}\nObra: {total_m}m x {altura}m\nTotal: ${venta_t:,.2f}", height=80)
 
-# --- TAB 2: INVENTARIO ---
+# TAB 2: INVENTARIO
 with tab2:
-    st.header("Inventario")
+    st.header("Inventario y Precios")
     df_s = cargar_datos(STOCK_FILE)
     
-    st.download_button("📥 Bajar Excel", descargar_excel(df_s), f"stock_{date.today()}.xlsx")
-    
-    with st.expander("📈 Inflación"):
-        porc = st.number_input("% Aumento", value=10.0)
-        if st.button("Aplicar"):
-            df_s["Precio Venta"] *= (1 + porc/100)
-            df_s.to_csv(STOCK_FILE, index=False)
-            st.rerun()
+    # Botones de herramientas
+    col_tools1, col_tools2 = st.columns([1, 3])
+    with col_tools1:
+        st.download_button("📥 Bajar Excel", descargar_excel(df_s), f"stock_{date.today()}.xlsx")
+    with col_tools2:
+        with st.expander("📈 Ajuste por Inflación (Masivo)"):
+            porc = st.number_input("% Aumento", value=10.0)
+            if st.button("Aplicar Aumento"):
+                df_s["Precio Venta"] *= (1 + porc/100)
+                df_s.to_csv(STOCK_FILE, index=False)
+                st.success("Precios actualizados.")
+                st.rerun()
 
-    def color_stock(row):
-        return ['background-color: #ff4b4b; color: white' if row['Cantidad'] <= row['Stock Minimo'] else '' for _ in row]
+    st.info("💡 Hacé doble clic en cualquier celda para editarla. Los cambios se guardan al apretar el botón de abajo.")
 
-    st.dataframe(df_s.style.apply(color_stock, axis=1).format({"Cantidad": "{:.1f}", "Precio Costo": "${:.0f}", "Precio Venta": "${:.0f}"}), use_container_width=True, hide_index=True)
-    
-    if st.button("💾 Guardar Cambios"):
-        st.data_editor(df_s, key="ed_s").to_csv(STOCK_FILE, index=False)
+    # TABLA ÚNICA Y PODEROSA (Data Editor con Formato)
+    df_edit = st.data_editor(
+        df_s,
+        num_rows="dynamic", 
+        use_container_width=True,
+        hide_index=True,
+        key="editor_stock_final",
+        column_config={
+            "Producto": st.column_config.TextColumn("Nombre del Producto", required=True),
+            "Cantidad": st.column_config.NumberColumn("Stock Real", help="Cantidad actual en galpón", format="%.1f"), # 1 decimal
+            "Unidad": st.column_config.SelectboxColumn("Unidad", options=["un.", "kg", "m", "bolsas", "m3", "litros"], required=True),
+            "Precio Costo": st.column_config.NumberColumn("Costo", format="$ %d"), # Sin decimales, con signo $
+            "Precio Venta": st.column_config.NumberColumn("Precio Venta", format="$ %d"), # Sin decimales, con signo $
+            "Stock Minimo": st.column_config.NumberColumn("Alerta Mínimo", help="Avísame cuando baje de este número", format="%d") # Entero puro
+        }
+    )
+
+    # Semáforo simple (Texto abajo) para no bloquear la tabla
+    criticos = df_edit[df_edit["Cantidad"] <= df_edit["Stock Minimo"]]
+    if not criticos.empty:
+        st.error(f"⚠️ ATENCIÓN: Tenés {len(criticos)} productos con stock bajo o crítico.")
+        with st.expander("Ver lista de faltantes"):
+            st.dataframe(criticos[["Producto", "Cantidad", "Stock Minimo"]])
+
+    if st.button("💾 GUARDAR CAMBIOS DE STOCK", type="primary"):
+        df_edit.to_csv(STOCK_FILE, index=False)
+        st.success("¡Inventario actualizado correctamente!")
         st.rerun()
 
-# --- TAB 3: ANÁLISIS ---
+# TAB 3: ANÁLISIS 
 with tab3:
     st.header("Estadísticas")
     df_v = cargar_datos(VENTAS_FILE)
@@ -172,7 +198,7 @@ with tab3:
         st.bar_chart(df_v.set_index("Fecha")["Monto Total"])
     else: st.info("Sin datos.")
 
-# --- TAB 4: GASTOS ---
+# TAB 4: GASTOS 
 with tab4:
     st.header("Compras")
     df_g = cargar_datos(GASTOS_FILE)
@@ -277,3 +303,4 @@ with tab6:
                         df_e.at[index, "Estado"] = "Entregado"
                         df_e.to_csv(ENTREGAS_FILE, index=False)
                         st.rerun()
+
