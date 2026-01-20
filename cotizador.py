@@ -274,4 +274,4 @@ with tab5:
             receta_selec = df_r[df_r["Producto Final"] == prod_hacer]
             st.write("**Materiales que se descontarán:**")
             for _, fila in receta_selec.iterrows():
-                st.write(f"- {fila['Insumo']}: {fila['Cantidad']
+         st.write(f"- {fila['Insumo']}: {fila['Cantidad'] * cant_hacer:.2f}")
