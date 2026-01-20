@@ -3,27 +3,27 @@ import pandas as pd
 import math
 import os
 import io
+import urllib.parse
 from datetime import date
 
 # --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Gestión Del Carmen - Sistema Pro", layout="wide")
+st.set_page_config(page_title="Gestión Del Carmen - Sistema Integral", layout="wide")
 
 # Rutas de archivos
 STOCK_FILE = "stock_del_carmen.csv"
 GASTOS_FILE = "gastos_del_carmen.csv"
 RECETAS_FILE = "recetas_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
+ENTREGAS_FILE = "entregas_del_carmen.csv" # Nuevo archivo para logística
 
-# --- INICIALIZACIÓN Y REPARACIÓN DE ARCHIVOS ---
+# --- INICIALIZACIÓN ---
 def inicializar_archivos():
-    # Columnas obligatorias
     cols_stock = ["Producto", "Cantidad", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
     
-    # 1. Chequeo de Stock
+    # 1. Stock
     if not os.path.exists(STOCK_FILE):
         pd.DataFrame(columns=cols_stock).to_csv(STOCK_FILE, index=False)
     else:
-        # PARCHE DE SEGURIDAD: Agrega columnas faltantes si el archivo es viejo
         df_temp = pd.read_csv(STOCK_FILE)
         guardar = False
         for col in cols_stock:
@@ -33,13 +33,17 @@ def inicializar_archivos():
         if guardar:
             df_temp.to_csv(STOCK_FILE, index=False)
 
-    # 2. Chequeo de otros archivos
+    # 2. Otros archivos
     if not os.path.exists(GASTOS_FILE):
         pd.DataFrame(columns=["Fecha", "Insumo", "Cantidad", "Monto"]).to_csv(GASTOS_FILE, index=False)
     if not os.path.exists(VENTAS_FILE):
         pd.DataFrame(columns=["Fecha", "Cliente", "Monto Total", "Ganancia"]).to_csv(VENTAS_FILE, index=False)
     if not os.path.exists(RECETAS_FILE):
         pd.DataFrame(columns=["Producto Final", "Insumo", "Cantidad"]).to_csv(RECETAS_FILE, index=False)
+    
+    # 3. Archivo de Logística (NUEVO)
+    if not os.path.exists(ENTREGAS_FILE):
+        pd.DataFrame(columns=["Fecha", "Cliente", "Direccion", "Carga", "Estado"]).to_csv(ENTREGAS_FILE, index=False)
 
 def cargar_datos(archivo):
     df = pd.read_csv(archivo)
@@ -55,36 +59,33 @@ def descargar_excel(df):
 
 inicializar_archivos()
 
-# --- INTERFAZ PRINCIPAL ---
+# --- INTERFAZ ---
 st.title("🏗️ Alambrados del Carmen S.A.")
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Cotizador", "📦 Inventario", "📊 Análisis", "💰 Gastos", "⚒️ Fabricación"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📋 Cotizador", "📦 Inventario", "📊 Análisis", "💰 Gastos", "⚒️ Fábrica", "🚚 Logística"])
 
-# --- TAB 1: COTIZADOR ---
+# --- TAB 1: COTIZADOR (AHORA PIDE DIRECCIÓN) ---
 with tab1:
-    st.header("Presupuesto de Obra")
+    st.header("Presupuesto y Venta")
     df_s = cargar_datos(STOCK_FILE)
     
     with st.container(border=True):
         c1, c2 = st.columns(2)
-        cliente = c1.text_input("Nombre del Cliente", "Venta Particular")
+        cliente = c1.text_input("Cliente", "Consumidor Final")
+        direccion = c1.text_input("Dirección de Entrega (Para el mapa)", "Retira por local")
         
-        # 1. Altura editable
-        altura = c1.number_input("Altura del Cerco (m)", min_value=0.1, value=1.5, step=0.1)
+        altura = c1.number_input("Altura (m)", min_value=0.1, value=1.5, step=0.1)
+        hilos = c1.number_input("Hilos Alambre", min_value=1, value=3 if altura <= 1.5 else 4)
         
-        # 2. Hilos automáticos pero editables
-        hilos_sug = 3 if altura <= 1.5 else 4
-        hilos = c1.number_input("Cantidad de Hilos de Alambre", min_value=1, value=hilos_sug)
+        tipo = c2.radio("Obra:", ["Lineal", "Perímetro"], horizontal=True)
+        largo = c2.number_input("Largo (m)", min_value=1.0, value=20.0)
+        ancho = c2.number_input("Fondo (m)", min_value=0.0) if tipo == "Perímetro" else 0.0
         
-        tipo = c2.radio("Tipo de Obra:", ["Tramo Lineal", "Perímetro Completo"], horizontal=True)
-        largo = c2.number_input("Metros Largo", min_value=1.0, value=20.0)
-        ancho = c2.number_input("Metros Fondo", min_value=0.0) if tipo == "Perímetro Completo" else 0.0
-        
-        manual = st.toggle("🔓 EDITAR CANTIDADES MANUALMENTE")
+        manual = st.toggle("🔓 Editar Manual")
 
     # Cálculos
-    total_m = (largo + ancho) * 2 if tipo == "Perímetro Completo" else largo
-    s_pi = math.ceil(total_m / 3) + (1 if tipo == "Tramo Lineal" else 0)
-    s_pr = math.floor(total_m / 25) + (4 if tipo == "Perímetro Completo" else 2)
+    total_m = (largo + ancho) * 2 if tipo == "Perímetro" else largo
+    s_pi = math.ceil(total_m / 3) + (1 if tipo == "Lineal" else 0)
+    s_pr = math.floor(total_m / 25) + (4 if tipo == "Perímetro" else 2)
     s_tj = round(total_m * 1.05, 1)
     total_alambre_hilos = total_m * hilos
 
@@ -100,74 +101,68 @@ with tab1:
         try: return float(df_s.loc[df_s["Producto"].str.contains(n, case=False, na=False), col].values[0])
         except: return 0.0
 
-    # Precio Alambre (Estimado: stock en kg, rendimiento 20m/kg)
-    precio_alambre_stock = get_p("Alambre", "Precio Venta") 
-    costo_hilos = (total_alambre_hilos / 20) * precio_alambre_stock 
-
-    venta_t = (p_int * get_p("Intermedio", "Precio Venta")) + \
-              (p_ref * get_p("Refuerzo", "Precio Venta")) + \
-              (m_tej * get_p("Tejido", "Precio Venta")) + \
-              costo_hilos
+    costo_hilos = (total_alambre_hilos / 20) * get_p("Alambre", "Precio Venta") 
+    venta_t = (p_int * get_p("Intermedio", "Precio Venta")) + (p_ref * get_p("Refuerzo", "Precio Venta")) + (m_tej * get_p("Tejido", "Precio Venta")) + costo_hilos
 
     st.divider()
     res1, res2 = st.columns([2, 1])
+    detalle_carga = f"{p_int} Postes Int, {p_ref} Postes Ref, {m_tej}m Tejido, {hilos} Hilos ({total_alambre_hilos}m)"
+    
     with res1:
-        st.subheader("📋 Resumen de Materiales")
-        st.write(f"• **{p_int}** Postes Intermedios")
-        st.write(f"• **{p_ref}** Postes Refuerzo")
-        st.write(f"• **{m_tej}m** Tejido Romboidal")
-        st.write(f"• **{hilos}** Hilos ({total_alambre_hilos}m)")
+        st.subheader("Resumen Materiales")
+        st.write(f"• {p_int} Postes Int. | {p_ref} Postes Ref.")
+        st.write(f"• {m_tej}m Tejido | {hilos} Hilos")
+        st.caption(f"📍 Destino: {direccion}")
     
     with res2:
-        st.metric("PRECIO TOTAL", f"$ {venta_t:,.2f}")
+        st.metric("TOTAL", f"$ {venta_t:,.2f}")
         if st.button("🏁 CONFIRMAR VENTA"):
-            # Descuento de stock
+            # 1. Descuento Stock
             df_s.loc[df_s["Producto"].str.contains("Intermedio", case=False), "Cantidad"] -= p_int
             df_s.loc[df_s["Producto"].str.contains("Refuerzo", case=False), "Cantidad"] -= p_ref
             df_s.loc[df_s["Producto"].str.contains("Tejido", case=False), "Cantidad"] -= m_tej
             df_s.loc[df_s["Producto"].str.contains("Alambre", case=False), "Cantidad"] -= (total_alambre_hilos / 20)
-            
             df_s.to_csv(STOCK_FILE, index=False)
+            
+            # 2. Guardar Venta
             pd.concat([cargar_datos(VENTAS_FILE), pd.DataFrame([{"Fecha": date.today(), "Cliente": cliente, "Monto Total": venta_t, "Ganancia": 0.0}])]).to_csv(VENTAS_FILE, index=False)
-            st.success("Venta guardada.")
+            
+            # 3. Guardar Logística (NUEVO)
+            if direccion.lower() != "retira por local":
+                nuevo_envio = pd.DataFrame([{
+                    "Fecha": date.today(), "Cliente": cliente, "Direccion": direccion, 
+                    "Carga": detalle_carga, "Estado": "Pendiente"
+                }])
+                pd.concat([cargar_datos(ENTREGAS_FILE), nuevo_envio]).to_csv(ENTREGAS_FILE, index=False)
+                st.success("Venta guardada y enviada a Hoja de Ruta 🚚")
+            else:
+                st.success("Venta guardada (Retira cliente).")
+            
             st.rerun()
 
-    wa_text = f"*Alambrados del Carmen*\nCliente: {cliente}\nObra: {total_m}m x {altura}m\nMateriales:\n- {p_int} Postes Int.\n- {p_ref} Postes Ref.\n- {m_tej}m Tejido\n- {hilos} Hilos Alambre\n💰 *Total: ${venta_t:,.2f}*"
-    st.text_area("WhatsApp:", wa_text, height=100)
+    st.text_area("WhatsApp:", f"*Alambrados del Carmen*\nCliente: {cliente}\nObra: {total_m}m x {altura}m\nTotal: ${venta_t:,.2f}", height=80)
 
 # --- TAB 2: INVENTARIO ---
 with tab2:
     st.header("Inventario")
     df_s = cargar_datos(STOCK_FILE)
     
-    # Botón Excel
-    st.download_button(
-        label="📥 Descargar Excel",
-        data=descargar_excel(df_s),
-        file_name=f"stock_{date.today()}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    # Aumento Masivo
-    with st.expander("📈 Aumento Masivo (Inflación)"):
-        porc = st.number_input("Porcentaje %", value=10.0)
-        if st.button("Aplicar Aumento"):
+    st.download_button("📥 Bajar Excel", descargar_excel(df_s), f"stock_{date.today()}.xlsx")
+    
+    with st.expander("📈 Inflación"):
+        porc = st.number_input("% Aumento", value=10.0)
+        if st.button("Aplicar"):
             df_s["Precio Venta"] *= (1 + porc/100)
             df_s.to_csv(STOCK_FILE, index=False)
-            st.success("Precios actualizados.")
             st.rerun()
 
     def color_stock(row):
         return ['background-color: #ff4b4b; color: white' if row['Cantidad'] <= row['Stock Minimo'] else '' for _ in row]
 
-    st.dataframe(
-        df_s.style.apply(color_stock, axis=1).format({"Cantidad": "{:.1f}", "Precio Costo": "${:.0f}", "Precio Venta": "${:.0f}", "Stock Minimo": "{:.0f}"}),
-        use_container_width=True, hide_index=True
-    )
+    st.dataframe(df_s.style.apply(color_stock, axis=1).format({"Cantidad": "{:.1f}", "Precio Costo": "${:.0f}", "Precio Venta": "${:.0f}"}), use_container_width=True, hide_index=True)
     
-    df_edit = st.data_editor(df_s, num_rows="dynamic", use_container_width=True, hide_index=True, key="ed_stock")
     if st.button("💾 Guardar Cambios"):
-        df_edit.to_csv(STOCK_FILE, index=False)
+        st.data_editor(df_s, key="ed_s").to_csv(STOCK_FILE, index=False)
         st.rerun()
 
 # --- TAB 3: ANÁLISIS ---
@@ -175,37 +170,34 @@ with tab3:
     st.header("Estadísticas")
     df_v = cargar_datos(VENTAS_FILE)
     if not df_v.empty:
+        st.metric("Ventas Totales", f"$ {df_v['Monto Total'].sum():,.2f}")
         st.bar_chart(df_v.set_index("Fecha")["Monto Total"])
-        st.metric("Total Vendido", f"$ {df_v['Monto Total'].sum():,.2f}")
-    else:
-        st.info("No hay ventas registradas.")
+    else: st.info("Sin datos.")
 
 # --- TAB 4: GASTOS ---
 with tab4:
     st.header("Compras")
     df_g = cargar_datos(GASTOS_FILE)
     df_s = cargar_datos(STOCK_FILE)
-    
-    lista = ["---"] + df_s["Producto"].tolist() + ["+ NUEVO PRODUCTO"]
+    lista = ["---"] + df_s["Producto"].tolist() + ["+ NUEVO"]
     sel = st.selectbox("Insumo:", options=lista)
 
     with st.form("gasto"):
         nom, uni = "", "un."
-        if sel == "+ NUEVO PRODUCTO":
+        if sel == "+ NUEVO":
             c1, c2 = st.columns(2)
             nom = c1.text_input("Nombre")
             uni = c2.selectbox("Unidad", ["un.", "kg", "m", "bolsas"])
         
         cant = st.number_input("Cantidad", min_value=0.1)
-        monto = st.number_input("Monto Total ($)", min_value=0)
+        monto = st.number_input("Monto ($)", min_value=0)
         
         if st.form_submit_button("Registrar"):
-            item = nom if sel == "+ NUEVO PRODUCTO" else sel
-            if sel == "+ NUEVO PRODUCTO":
+            item = nom if sel == "+ NUEVO" else sel
+            if sel == "+ NUEVO":
                 df_s = pd.concat([df_s, pd.DataFrame([{"Producto": nom, "Cantidad": cant, "Unidad": uni, "Precio Costo": monto/cant, "Precio Venta": 0.0, "Stock Minimo": 5.0}])], ignore_index=True)
             else:
                 df_s.loc[df_s["Producto"] == item, "Cantidad"] += cant
-            
             pd.concat([df_g, pd.DataFrame([{"Fecha": date.today(), "Insumo": item, "Cantidad": cant, "Monto": monto}])]).to_csv(GASTOS_FILE, index=False)
             df_s.to_csv(STOCK_FILE, index=False)
             st.rerun()
@@ -214,52 +206,75 @@ with tab4:
 with tab5:
     st.header("⚒️ Fábrica")
     df_r = cargar_datos(RECETAS_FILE)
-    df_s_actual = cargar_datos(STOCK_FILE)
+    df_s_act = cargar_datos(STOCK_FILE)
 
-    st.subheader("1. Configurar Recetas")
-    df_r_edit = st.data_editor(
-        df_r, num_rows="dynamic", use_container_width=True, hide_index=True,
-        column_config={
-            "Producto Final": st.column_config.TextColumn("Producto a Fabricar"),
-            "Insumo": st.column_config.SelectboxColumn("Insumo", options=df_s_actual["Producto"].unique().tolist()),
-            "Cantidad": st.column_config.NumberColumn("Cant. x Unidad")
-        }
-    )
-    if st.button("💾 Guardar Recetas"):
-        df_r_edit.to_csv(RECETAS_FILE, index=False)
-        st.success("Guardado.")
+    st.subheader("1. Recetas")
+    df_r_ed = st.data_editor(df_r, num_rows="dynamic", use_container_width=True, hide_index=True, column_config={"Insumo": st.column_config.SelectboxColumn(options=df_s_act["Producto"].unique())})
+    if st.button("💾 Guardar Receta"):
+        df_r_ed.to_csv(RECETAS_FILE, index=False)
         st.rerun()
 
     st.divider()
-    st.subheader("2. Registrar Producción")
+    st.subheader("2. Producción")
     prods = df_r["Producto Final"].unique().tolist()
-    
     if prods:
         with st.form("fab"):
-            p_sel = st.selectbox("Producto:", options=prods)
-            c_sel = st.number_input("Cantidad:", min_value=1)
-            
-            # Vista previa
-            receta = df_r[df_r["Producto Final"] == p_sel]
-            st.write("Se descontará:")
-            for _, r in receta.iterrows():
-                st.write(f"- {r['Insumo']}: {r['Cantidad'] * c_sel:.2f}")
-
+            p = st.selectbox("Producto:", prods)
+            c = st.number_input("Cantidad:", min_value=1)
             if st.form_submit_button("🚀 Fabricar"):
                 df_stk = cargar_datos(STOCK_FILE)
-                # Sumar producto
-                if p_sel not in df_stk["Producto"].values:
-                    df_stk = pd.concat([df_stk, pd.DataFrame([{"Producto": p_sel, "Cantidad": c_sel, "Unidad": "un.", "Precio Venta": 0.0, "Stock Minimo": 0.0}])], ignore_index=True)
-                else:
-                    df_stk.loc[df_stk["Producto"] == p_sel, "Cantidad"] += c_sel
+                rec = df_r[df_r["Producto Final"] == p]
                 
-                # Restar insumos
-                for _, r in receta.iterrows():
+                # Sumar Prod
+                if p not in df_stk["Producto"].values:
+                    df_stk = pd.concat([df_stk, pd.DataFrame([{"Producto": p, "Cantidad": c, "Unidad": "un.", "Precio Venta": 0.0, "Stock Minimo": 0.0}])], ignore_index=True)
+                else: df_stk.loc[df_stk["Producto"] == p, "Cantidad"] += c
+                
+                # Restar Insumos
+                for _, r in rec.iterrows():
                     if r['Insumo'] in df_stk["Producto"].values:
-                        df_stk.loc[df_stk["Producto"] == r['Insumo'], "Cantidad"] -= (r['Cantidad'] * c_sel)
+                        df_stk.loc[df_stk["Producto"] == r['Insumo'], "Cantidad"] -= (r['Cantidad'] * c)
                 
                 df_stk.to_csv(STOCK_FILE, index=False)
-                st.success("Listo.")
+                st.success("Hecho.")
                 st.rerun()
+
+# --- TAB 6: LOGÍSTICA (NUEVO MÓDULO EMPLEADOS) ---
+with tab6:
+    st.header("🚚 Hoja de Ruta y Entregas")
+    df_e = cargar_datos(ENTREGAS_FILE)
+    
+    # Filtros
+    pendientes = df_e[df_e["Estado"] == "Pendiente"]
+    
+    if pendientes.empty:
+        st.info("✅ No hay entregas pendientes. ¡Buen trabajo!")
     else:
-        st.warning("Cargá una receta arriba primero.")
+        st.write(f"Tenés **{len(pendientes)}** pedidos para entregar:")
+        
+        for index, row in pendientes.iterrows():
+            with st.container(border=True):
+                c_info, c_mapa, c_accion = st.columns([3, 1, 1])
+                
+                with c_info:
+                    st.subheader(f"👤 {row['Cliente']}")
+                    st.write(f"📅 **Fecha:** {row['Fecha']}")
+                    st.write(f"📦 **CARGAR:** {row['Carga']}")
+                    st.write(f"📍 **Dirección:** {row['Direccion']}")
+                
+                with c_mapa:
+                    # Generar Link de Google Maps
+                    direccion_url = urllib.parse.quote(row['Direccion'])
+                    url_mapa = f"https://www.google.com/maps/search/?api=1&query={direccion_url}"
+                    st.link_button("📍 Ir con GPS", url_mapa, type="secondary")
+                
+                with c_accion:
+                    if st.button("✅ Entregado", key=f"ent_{index}"):
+                        # Actualizar estado a Entregado
+                        df_e.at[index, "Estado"] = "Entregado"
+                        df_e.to_csv(ENTREGAS_FILE, index=False)
+                        st.success("Marcado como entregado.")
+                        st.rerun()
+    
+    with st.expander("📜 Ver Historial de Entregas Realizadas"):
+        st.dataframe(df_e[df_e["Estado"] == "Entregado"])
