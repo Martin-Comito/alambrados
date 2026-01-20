@@ -14,7 +14,7 @@ STOCK_FILE = "stock_del_carmen.csv"
 GASTOS_FILE = "gastos_del_carmen.csv"
 RECETAS_FILE = "recetas_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
-ENTREGAS_FILE = "entregas_del_carmen.csv" # Nuevo archivo para logística
+ENTREGAS_FILE = "entregas_del_carmen.csv"
 
 # --- INICIALIZACIÓN ---
 def inicializar_archivos():
@@ -40,8 +40,6 @@ def inicializar_archivos():
         pd.DataFrame(columns=["Fecha", "Cliente", "Monto Total", "Ganancia"]).to_csv(VENTAS_FILE, index=False)
     if not os.path.exists(RECETAS_FILE):
         pd.DataFrame(columns=["Producto Final", "Insumo", "Cantidad"]).to_csv(RECETAS_FILE, index=False)
-    
-    # 3. Archivo de Logística (NUEVO)
     if not os.path.exists(ENTREGAS_FILE):
         pd.DataFrame(columns=["Fecha", "Cliente", "Direccion", "Carga", "Estado"]).to_csv(ENTREGAS_FILE, index=False)
 
@@ -63,7 +61,7 @@ inicializar_archivos()
 st.title("🏗️ Alambrados del Carmen S.A.")
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📋 Cotizador", "📦 Inventario", "📊 Análisis", "💰 Gastos", "⚒️ Fábrica", "🚚 Logística"])
 
-# --- TAB 1: COTIZADOR (AHORA PIDE DIRECCIÓN) ---
+# --- TAB 1: COTIZADOR ---
 with tab1:
     st.header("Presupuesto y Venta")
     df_s = cargar_datos(STOCK_FILE)
@@ -127,14 +125,14 @@ with tab1:
             # 2. Guardar Venta
             pd.concat([cargar_datos(VENTAS_FILE), pd.DataFrame([{"Fecha": date.today(), "Cliente": cliente, "Monto Total": venta_t, "Ganancia": 0.0}])]).to_csv(VENTAS_FILE, index=False)
             
-            # 3. Guardar Logística (NUEVO)
+            # 3. Guardar Logística
             if direccion.lower() != "retira por local":
                 nuevo_envio = pd.DataFrame([{
                     "Fecha": date.today(), "Cliente": cliente, "Direccion": direccion, 
                     "Carga": detalle_carga, "Estado": "Pendiente"
                 }])
                 pd.concat([cargar_datos(ENTREGAS_FILE), nuevo_envio]).to_csv(ENTREGAS_FILE, index=False)
-                st.success("Venta guardada y enviada a Hoja de Ruta 🚚")
+                st.success("Venta guardada y enviada a Logística 🚚")
             else:
                 st.success("Venta guardada (Retira cliente).")
             
@@ -202,14 +200,23 @@ with tab4:
             df_s.to_csv(STOCK_FILE, index=False)
             st.rerun()
 
-# --- TAB 5: FABRICACIÓN ---
+# --- TAB 5: FABRICACIÓN (ERROR CORREGIDO) ---
 with tab5:
     st.header("⚒️ Fábrica")
     df_r = cargar_datos(RECETAS_FILE)
     df_s_act = cargar_datos(STOCK_FILE)
 
     st.subheader("1. Recetas")
-    df_r_ed = st.data_editor(df_r, num_rows="dynamic", use_container_width=True, hide_index=True, column_config={"Insumo": st.column_config.SelectboxColumn(options=df_s_act["Producto"].unique())})
+    # ACÁ ESTABA EL ERROR: Agregué .tolist() al final para que Streamlit no se queje
+    df_r_ed = st.data_editor(
+        df_r, 
+        num_rows="dynamic", 
+        use_container_width=True, 
+        hide_index=True, 
+        column_config={
+            "Insumo": st.column_config.SelectboxColumn(options=df_s_act["Producto"].unique().tolist())
+        }
+    )
     if st.button("💾 Guardar Receta"):
         df_r_ed.to_csv(RECETAS_FILE, index=False)
         st.rerun()
@@ -221,9 +228,15 @@ with tab5:
         with st.form("fab"):
             p = st.selectbox("Producto:", prods)
             c = st.number_input("Cantidad:", min_value=1)
+            
+            # Vista previa
+            st.write("Se descontará:")
+            rec = df_r[df_r["Producto Final"] == p]
+            for _, r in rec.iterrows():
+                st.write(f"- {r['Insumo']}: {r['Cantidad'] * c:.2f}")
+
             if st.form_submit_button("🚀 Fabricar"):
                 df_stk = cargar_datos(STOCK_FILE)
-                rec = df_r[df_r["Producto Final"] == p]
                 
                 # Sumar Prod
                 if p not in df_stk["Producto"].values:
@@ -239,42 +252,28 @@ with tab5:
                 st.success("Hecho.")
                 st.rerun()
 
-# --- TAB 6: LOGÍSTICA (NUEVO MÓDULO EMPLEADOS) ---
+# --- TAB 6: LOGÍSTICA ---
 with tab6:
-    st.header("🚚 Hoja de Ruta y Entregas")
+    st.header("🚚 Hoja de Ruta")
     df_e = cargar_datos(ENTREGAS_FILE)
-    
-    # Filtros
     pendientes = df_e[df_e["Estado"] == "Pendiente"]
     
     if pendientes.empty:
-        st.info("✅ No hay entregas pendientes. ¡Buen trabajo!")
+        st.info("✅ Todo entregado.")
     else:
-        st.write(f"Tenés **{len(pendientes)}** pedidos para entregar:")
-        
+        st.write(f"Pendientes: {len(pendientes)}")
         for index, row in pendientes.iterrows():
             with st.container(border=True):
                 c_info, c_mapa, c_accion = st.columns([3, 1, 1])
-                
                 with c_info:
                     st.subheader(f"👤 {row['Cliente']}")
-                    st.write(f"📅 **Fecha:** {row['Fecha']}")
-                    st.write(f"📦 **CARGAR:** {row['Carga']}")
-                    st.write(f"📍 **Dirección:** {row['Direccion']}")
-                
+                    st.write(f"📍 {row['Direccion']}")
+                    st.write(f"📦 {row['Carga']}")
                 with c_mapa:
-                    # Generar Link de Google Maps
-                    direccion_url = urllib.parse.quote(row['Direccion'])
-                    url_mapa = f"https://www.google.com/maps/search/?api=1&query={direccion_url}"
-                    st.link_button("📍 Ir con GPS", url_mapa, type="secondary")
-                
+                    url_mapa = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(row['Direccion'])}"
+                    st.link_button("📍 GPS", url_mapa)
                 with c_accion:
-                    if st.button("✅ Entregado", key=f"ent_{index}"):
-                        # Actualizar estado a Entregado
+                    if st.button("✅ Listo", key=f"ent_{index}"):
                         df_e.at[index, "Estado"] = "Entregado"
                         df_e.to_csv(ENTREGAS_FILE, index=False)
-                        st.success("Marcado como entregado.")
                         st.rerun()
-    
-    with st.expander("📜 Ver Historial de Entregas Realizadas"):
-        st.dataframe(df_e[df_e["Estado"] == "Entregado"])
