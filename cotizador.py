@@ -5,7 +5,7 @@ import os
 import io
 from datetime import date
 
-# CONFIGURACIÓN DE PÁGINA 
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Gestión Del Carmen - Sistema Pro", layout="wide")
 
 # Rutas de archivos
@@ -14,14 +14,22 @@ GASTOS_FILE = "gastos_del_carmen.csv"
 RECETAS_FILE = "recetas_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
 
-# INICIALIZACIÓN Y REPARACIÓN DE ARCHIVOS
+# --- INICIALIZACIÓN Y REPARACIÓN DE ARCHIVOS ---
 def inicializar_archivos():
     # Columnas obligatorias para que no falle el sistema
     cols_stock = ["Producto", "Cantidad", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
     
     # 1. Chequeo de Stock
     if not os.path.exists(STOCK_FILE):
-        pd.DataFrame(columns=cols_stock).to_csv(STOCK_FILE, index=False)
+        # Datos iniciales de prueba para que no arranque vacío
+        pd.DataFrame({
+            "Producto": ["Poste Intermedio", "Poste Refuerzo", "Tejido 1.50m", "Alambre", "Torniqueta"],
+            "Cantidad": [50.0, 20.0, 100.0, 50.0, 100.0],
+            "Unidad": ["un.", "un.", "m", "kg", "un."],
+            "Precio Costo": [3000.0, 6000.0, 2500.0, 2000.0, 800.0],
+            "Precio Venta": [5500.0, 9500.0, 4200.0, 3500.0, 1500.0],
+            "Stock Minimo": [10.0, 5.0, 20.0, 10.0, 20.0]
+        }).to_csv(STOCK_FILE, index=False)
     else:
         # PARCHE DE SEGURIDAD: Si el archivo existe pero le faltan columnas, las agrega.
         df_temp = pd.read_csv(STOCK_FILE)
@@ -47,19 +55,13 @@ def cargar_datos(archivo):
         df["Fecha"] = pd.to_datetime(df["Fecha"]).dt.date
     return df
 
-def descargar_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Reporte')
-    return output.getvalue()
-
 inicializar_archivos()
 
-# INTERFAZ 
+# --- INTERFAZ ---
 st.title("🏗️ Alambrados del Carmen S.A.")
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Cotizador", "📦 Inventario", "📊 Análisis", "💰 Gastos", "⚒️ Fabricación"])
 
-# TAB 1: COTIZADOR (HILOS Y ALTURA EDITABLES)
+# --- TAB 1: COTIZADOR (HILOS Y ALTURA EDITABLES) ---
 with tab1:
     st.header("Presupuesto de Obra")
     df_s = cargar_datos(STOCK_FILE)
@@ -81,13 +83,13 @@ with tab1:
         
         manual = st.toggle("🔓 EDITAR CANTIDADES MANUALMENTE")
 
-    # Cálculos
+    # Cálculos de materiales
     total_m = (largo + ancho) * 2 if tipo == "Perímetro Completo" else largo
     s_pi = math.ceil(total_m / 3) + (1 if tipo == "Tramo Lineal" else 0)
     s_pr = math.floor(total_m / 25) + (4 if tipo == "Perímetro Completo" else 2)
     s_tj = round(total_m * 1.05, 1)
     
-    # Cálculo de Alambre para los hilos (Metros lineales de alambre)
+    # Cálculo de Alambre para los hilos (Metros lineales totales)
     total_alambre_hilos = total_m * hilos
 
     if manual:
@@ -98,19 +100,16 @@ with tab1:
     else:
         p_int, p_ref, m_tej = s_pi, s_pr, s_tj
 
-    # Buscador de precios
+    # Buscador de precios seguro
     def get_p(n, col):
         try: return float(df_s.loc[df_s["Producto"].str.contains(n, case=False, na=False), col].values[0])
         except: return 0.0
 
-    # Precio Alambre (Asumimos que el precio en stock es por kg, aprox 1kg = 20m de alambre alta resistencia, ajustar según realidad)
-    # Aquí hacemos un cálculo simple: Metros de alambre * Precio por metro (estimado o cargado)
-    # Si en stock tenés "Alambre" en kg, acá podrías convertir. Por ahora lo tratamos como ítem genérico.
+    # Precio Alambre: Asumimos rendimiento de 20m por kg (Ajustable)
     precio_alambre_stock = get_p("Alambre", "Precio Venta") 
-    # Supongamos que 1kg rinde 20m. Entonces Precio por Metro = Precio Kg / 20. 
-    # Ajustá este "20" a la realidad de tu alambre.
     costo_hilos = (total_alambre_hilos / 20) * precio_alambre_stock 
 
+    # Precio Total
     venta_t = (p_int * get_p("Intermedio", "Precio Venta")) + \
               (p_ref * get_p("Refuerzo", "Precio Venta")) + \
               (m_tej * get_p("Tejido", "Precio Venta")) + \
@@ -132,6 +131,7 @@ with tab1:
             df_s.loc[df_s["Producto"].str.contains("Intermedio", case=False), "Cantidad"] -= p_int
             df_s.loc[df_s["Producto"].str.contains("Refuerzo", case=False), "Cantidad"] -= p_ref
             df_s.loc[df_s["Producto"].str.contains("Tejido", case=False), "Cantidad"] -= m_tej
+            
             # Descontar alambre en kg (aprox)
             kg_alambre = total_alambre_hilos / 20 
             df_s.loc[df_s["Producto"].str.contains("Alambre", case=False), "Cantidad"] -= kg_alambre
@@ -143,10 +143,10 @@ with tab1:
             st.success("Venta confirmada y stock actualizado.")
             st.rerun()
 
-    wa_text = f"*Alambrados del Carmen*\nCliente: {cliente}\nObra: {total_m}m x {altura}m\nMateriales:\n- {p_int} Postes Int.\n- {p_ref} Postes Ref.\n- {m_tej}m Tejido\n- {hilos} Hilos Alambre\n💰 *Total: ${venta_t:,.2f}*"
+    wa_text = f"*Alambrados del Carmen*\nCliente: {cliente}\nObra: {total_m}m x {altura}m\nMateriales:\n- {p_int} Postes Int.\n- {p_ref} Postes Ref.\n- {m_tej}m Tejido\n- {hilos} Hilos Alambre ({total_alambre_hilos}m)\n💰 *Total: ${venta_t:,.2f}*"
     st.text_area("Copiá para WhatsApp:", wa_text, height=140)
 
-# TAB 2: INVENTARIO 
+# --- TAB 2: INVENTARIO (FORMATO LIMPIO) ---
 with tab2:
     st.header("Inventario de Galpón")
     df_s = cargar_datos(STOCK_FILE)
@@ -170,7 +170,7 @@ with tab2:
         df_edit.to_csv(STOCK_FILE, index=False)
         st.rerun()
 
-# TAB 3: ANÁLISIS 
+# --- TAB 3: ANÁLISIS ---
 with tab3:
     st.header("Estadísticas")
     df_v = cargar_datos(VENTAS_FILE)
@@ -180,7 +180,7 @@ with tab3:
     else:
         st.info("Registrá una venta para ver estadísticas.")
 
-# TAB 4: GASTOS (CON ALTA DE PRODUCTOS)
+# --- TAB 4: GASTOS (CON ALTA DE PRODUCTOS) ---
 with tab4:
     st.header("Registrar Gastos / Compras")
     df_g = cargar_datos(GASTOS_FILE)
@@ -204,7 +204,7 @@ with tab4:
         if st.form_submit_button("Confirmar Gasto"):
             item = n_nom if sel_gasto == "+ AGREGAR PRODUCTO NUEVO" else sel_gasto
             
-            # Si es nuevo, lo crea en Stock
+            # Si es nuevo, lo creamos en Stock
             if sel_gasto == "+ AGREGAR PRODUCTO NUEVO":
                 if n_nom:
                     # Calculamos costo unitario aproximado
@@ -215,29 +215,29 @@ with tab4:
                     st.error("Debes escribir un nombre para el producto nuevo.")
                     st.stop()
             else:
-                # Si existe, suma stock
+                # Si existe, sumamos stock
                 df_s.loc[df_s["Producto"] == item, "Cantidad"] += cant_g
             
-            # Guarda Gasto y Stock
+            # Guardamos Gasto y Stock
             pd.concat([df_g, pd.DataFrame([{"Fecha": date.today(), "Insumo": item, "Cantidad": cant_g, "Monto": monto_g}])]).to_csv(GASTOS_FILE, index=False)
             df_s.to_csv(STOCK_FILE, index=False)
             st.success("Gasto registrado y stock actualizado.")
             st.rerun()
 
-# TAB 5: FABRICACIÓN
+# --- TAB 5: FABRICACIÓN (RECETAS INFINITAS) ---
 with tab5:
     st.header("⚒️ Producción y Recetas")
     st.markdown("""
-    **¿Cómo funciona?**
-    1. En la tabla de arriba ("Configurar Recetas"), escribí el nombre de lo que querés fabricar (ej: **Tubo Cemento**).
-    2. Elegí qué material usa y cuánto.
-    3. Luego, usá el formulario de abajo para registrar la fabricación.
+    **Instrucciones:**
+    1. En la tabla de arriba, definí tu receta. Si un producto lleva 3 cosas, agregá 3 filas con el mismo "Producto Final".
+    2. Guardá los cambios.
+    3. Usá el formulario de abajo para registrar la fabricación.
     """)
     
     df_r = cargar_datos(RECETAS_FILE)
     df_s_actual = cargar_datos(STOCK_FILE)
 
-    # 1. CONFIGURACIÓN DE RECETAS 
+    # 1. CONFIGURACIÓN DE RECETAS
     st.subheader("1. Configurar Recetas")
     df_r_edit = st.data_editor(
         df_r,
@@ -245,7 +245,7 @@ with tab5:
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Producto Final": st.column_config.TextColumn("Producto a Fabricar", help="Escribí aquí el nombre del producto nuevo (ej: Tubo 1m)"),
+            "Producto Final": st.column_config.TextColumn("Producto a Fabricar", help="Escribí aquí el nombre (ej: Tubo 1m)"),
             "Insumo": st.column_config.SelectboxColumn("Insumo del Stock", options=df_s_actual["Producto"].unique().tolist()),
             "Cantidad": st.column_config.NumberColumn("Cantidad usada por unidad", format="%.2f")
         }
@@ -274,27 +274,4 @@ with tab5:
             receta_selec = df_r[df_r["Producto Final"] == prod_hacer]
             st.write("**Materiales que se descontarán:**")
             for _, fila in receta_selec.iterrows():
-                st.write(f"- {fila['Insumo']}: {fila['Cantidad'] * cant_hacer:.2f}")
-
-            if st.form_submit_button("🚀 Finalizar y Descontar"):
-                df_stk = cargar_datos(STOCK_FILE)
-                
-                # A. Sumar el producto terminado al stock (si no existe, se crea)
-                if prod_hacer not in df_stk["Producto"].values:
-                    nueva_f = pd.DataFrame([{"Producto": prod_hacer, "Cantidad": cant_hacer, "Unidad": "un.", "Precio Costo": 0.0, "Precio Venta": 0.0, "Stock Minimo": 0.0}])
-                    df_stk = pd.concat([df_stk, nueva_f], ignore_index=True)
-                else:
-                    df_stk.loc[df_stk["Producto"] == prod_hacer, "Cantidad"] += cant_hacer
-                
-                # B. Restar los insumos
-                for _, fila in receta_selec.iterrows():
-                    insumo_nombre = fila['Insumo']
-                    cantidad_a_restar = fila['Cantidad'] * cant_hacer
-                    
-                    # Verificamos que el insumo exista en stock para no dar error
-                    if insumo_nombre in df_stk["Producto"].values:
-                        df_stk.loc[df_stk["Producto"] == insumo_nombre, "Cantidad"] -= cantidad_a_restar
-                
-                df_stk.to_csv(STOCK_FILE, index=False)
-                st.success(f"¡Producción de {cant_hacer} {prod_hacer} registrada!")
-                st.rerun()
+                st.write(f"- {fila['Insumo']}: {fila['Cantidad']
