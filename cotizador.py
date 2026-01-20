@@ -5,27 +5,35 @@ import os
 import io
 from datetime import date
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Gestión Del Carmen - Demo Pro", layout="wide")
+# CONFIGURACIÓN DE PÁGINA 
+st.set_page_config(page_title="Gestión Del Carmen - Sistema Pro", layout="wide")
 
-# Archivos de datos
+# Rutas de archivos
 STOCK_FILE = "stock_del_carmen.csv"
 GASTOS_FILE = "gastos_del_carmen.csv"
 RECETAS_FILE = "recetas_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
 
-# --- INICIALIZACIÓN Y PARCHE DE SEGURIDAD ---
+# INICIALIZACIÓN Y REPARACIÓN DE ARCHIVOS
 def inicializar_archivos():
+    # Columnas obligatorias para que no falle el sistema
     cols_stock = ["Producto", "Cantidad", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
+    
+    # 1. Chequeo de Stock
     if not os.path.exists(STOCK_FILE):
         pd.DataFrame(columns=cols_stock).to_csv(STOCK_FILE, index=False)
     else:
+        # PARCHE DE SEGURIDAD: Si el archivo existe pero le faltan columnas, las agrega.
         df_temp = pd.read_csv(STOCK_FILE)
+        guardar = False
         for col in cols_stock:
             if col not in df_temp.columns:
                 df_temp[col] = 0.0
-        df_temp.to_csv(STOCK_FILE, index=False)
+                guardar = True
+        if guardar:
+            df_temp.to_csv(STOCK_FILE, index=False)
 
+    # 2. Chequeo de otros archivos
     if not os.path.exists(GASTOS_FILE):
         pd.DataFrame(columns=["Fecha", "Insumo", "Cantidad", "Monto"]).to_csv(GASTOS_FILE, index=False)
     if not os.path.exists(VENTAS_FILE):
@@ -39,13 +47,19 @@ def cargar_datos(archivo):
         df["Fecha"] = pd.to_datetime(df["Fecha"]).dt.date
     return df
 
+def descargar_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Reporte')
+    return output.getvalue()
+
 inicializar_archivos()
 
-# --- INTERFAZ ---
+# INTERFAZ 
 st.title("🏗️ Alambrados del Carmen S.A.")
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Cotizador", "📦 Inventario", "📊 Análisis", "💰 Gastos", "⚒️ Fabricación"])
 
-# --- TAB 1: COTIZADOR (CON HILOS EDITABLES) ---
+# TAB 1: COTIZADOR (HILOS Y ALTURA EDITABLES)
 with tab1:
     st.header("Presupuesto de Obra")
     df_s = cargar_datos(STOCK_FILE)
@@ -53,70 +67,96 @@ with tab1:
     with st.container(border=True):
         c1, c2 = st.columns(2)
         cliente = c1.text_input("Nombre del Cliente", "Venta Particular")
-        altura = c1.number_input("Altura del Cerco (m)", min_value=0.1, value=1.5, step=0.1)
-        # NUEVA FUNCIÓN: Hilos de alambre editables
-        hilos_sug = 3 if altura <= 1.5 else 4
-        hilos = c1.number_input("Cantidad de hilos de alambre", min_value=1, value=hilos_sug)
         
-        tipo = c2.radio("Tipo de cálculo:", ["Tramo Lineal", "Perímetro Completo"], horizontal=True)
+        # 1. Altura editable
+        altura = c1.number_input("Altura del Cerco (m)", min_value=0.1, value=1.5, step=0.1)
+        
+        # 2. Hilos automáticos pero editables
+        hilos_sugeridos = 3 if altura <= 1.5 else 4
+        hilos = c1.number_input("Cantidad de Hilos de Alambre", min_value=1, value=hilos_sugeridos)
+        
+        tipo = c2.radio("Tipo de Obra:", ["Tramo Lineal", "Perímetro Completo"], horizontal=True)
         largo = c2.number_input("Metros Largo", min_value=1.0, value=20.0)
         ancho = c2.number_input("Metros Fondo", min_value=0.0) if tipo == "Perímetro Completo" else 0.0
-        manual = st.toggle("🔓 EDITAR MATERIALES MANUALMENTE")
+        
+        manual = st.toggle("🔓 EDITAR CANTIDADES MANUALMENTE")
 
+    # Cálculos
     total_m = (largo + ancho) * 2 if tipo == "Perímetro Completo" else largo
-    s_pi = math.ceil(total_m / 3) + (1 if tipo == "Lineal" else 0)
+    s_pi = math.ceil(total_m / 3) + (1 if tipo == "Tramo Lineal" else 0)
     s_pr = math.floor(total_m / 25) + (4 if tipo == "Perímetro Completo" else 2)
     s_tj = round(total_m * 1.05, 1)
-    # Cálculo de metros de alambre
-    m_alambre_total = total_m * hilos
+    
+    # Cálculo de Alambre para los hilos (Metros lineales de alambre)
+    total_alambre_hilos = total_m * hilos
 
     if manual:
-        col_m1, col_m2, col_m3 = st.columns(3)
-        p_int = col_m1.number_input("Postes Intermedios", value=int(s_pi))
-        p_ref = col_m2.number_input("Postes Refuerzo", value=int(s_pr))
-        m_tej = col_m3.number_input("Metros Tejido", value=float(s_tj))
+        cm1, cm2, cm3 = st.columns(3)
+        p_int = cm1.number_input("Postes Intermedios", value=int(s_pi))
+        p_ref = cm2.number_input("Postes Refuerzo", value=int(s_pr))
+        m_tej = cm3.number_input("Metros Tejido", value=float(s_tj))
     else:
         p_int, p_ref, m_tej = s_pi, s_pr, s_tj
 
+    # Buscador de precios
     def get_p(n, col):
         try: return float(df_s.loc[df_s["Producto"].str.contains(n, case=False, na=False), col].values[0])
         except: return 0.0
 
-    # Precio basado en la configuración actual
+    # Precio Alambre (Asumimos que el precio en stock es por kg, aprox 1kg = 20m de alambre alta resistencia, ajustar según realidad)
+    # Aquí hacemos un cálculo simple: Metros de alambre * Precio por metro (estimado o cargado)
+    # Si en stock tenés "Alambre" en kg, acá podrías convertir. Por ahora lo tratamos como ítem genérico.
+    precio_alambre_stock = get_p("Alambre", "Precio Venta") 
+    # Supongamos que 1kg rinde 20m. Entonces Precio por Metro = Precio Kg / 20. 
+    # Ajustá este "20" a la realidad de tu alambre.
+    costo_hilos = (total_alambre_hilos / 20) * precio_alambre_stock 
+
     venta_t = (p_int * get_p("Intermedio", "Precio Venta")) + \
               (p_ref * get_p("Refuerzo", "Precio Venta")) + \
               (m_tej * get_p("Tejido", "Precio Venta")) + \
-              (m_alambre_total * (get_p("Alambre", "Precio Venta") / 100)) # Ejemplo: precio por metro
+              costo_hilos
 
     st.divider()
     res1, res2 = st.columns([2, 1])
     with res1:
-        st.subheader("📋 Resumen para el Cliente")
+        st.subheader("📋 Resumen de Materiales")
         st.write(f"• **{p_int}** Postes Intermedios")
-        st.write(f"• **{p_ref}** Postes de Refuerzo")
+        st.write(f"• **{p_ref}** Postes Refuerzo")
         st.write(f"• **{m_tej}m** Tejido Romboidal")
-        st.write(f"• **{hilos}** Hilos de alambre (Total: {m_alambre_total}m)")
+        st.write(f"• **{hilos}** Hilos de alambre (Total: {total_alambre_hilos} metros lineales)")
     
     with res2:
-        st.metric("PRECIO VENTA ESTIMADO", f"$ {venta_t:,.2f}")
+        st.metric("PRECIO TOTAL ESTIMADO", f"$ {venta_t:,.2f}")
         if st.button("🏁 CONFIRMAR VENTA"):
+            # Descuento de stock
             df_s.loc[df_s["Producto"].str.contains("Intermedio", case=False), "Cantidad"] -= p_int
             df_s.loc[df_s["Producto"].str.contains("Refuerzo", case=False), "Cantidad"] -= p_ref
             df_s.loc[df_s["Producto"].str.contains("Tejido", case=False), "Cantidad"] -= m_tej
+            # Descontar alambre en kg (aprox)
+            kg_alambre = total_alambre_hilos / 20 
+            df_s.loc[df_s["Producto"].str.contains("Alambre", case=False), "Cantidad"] -= kg_alambre
+            
             df_s.to_csv(STOCK_FILE, index=False)
-            st.success("Venta realizada. Stock actualizado.")
+            
+            # Guardar Venta
+            pd.concat([cargar_datos(VENTAS_FILE), pd.DataFrame([{"Fecha": date.today(), "Cliente": cliente, "Monto Total": venta_t, "Ganancia": 0.0}])]).to_csv(VENTAS_FILE, index=False)
+            st.success("Venta confirmada y stock actualizado.")
             st.rerun()
 
     wa_text = f"*Alambrados del Carmen*\nCliente: {cliente}\nObra: {total_m}m x {altura}m\nMateriales:\n- {p_int} Postes Int.\n- {p_ref} Postes Ref.\n- {m_tej}m Tejido\n- {hilos} Hilos Alambre\n💰 *Total: ${venta_t:,.2f}*"
     st.text_area("Copiá para WhatsApp:", wa_text, height=140)
 
-# --- TAB 2: INVENTARIO (FORMATO LIMPIO) ---
+# TAB 2: INVENTARIO 
 with tab2:
     st.header("Inventario de Galpón")
     df_s = cargar_datos(STOCK_FILE)
-    # Formateo para quitar ceros decimales innecesarios
+    
+    # Función de semáforo
+    def color_stock(row):
+        return ['background-color: #ff4b4b; color: white' if row['Cantidad'] <= row['Stock Minimo'] else '' for _ in row]
+
     st.dataframe(
-        df_s.style.format({
+        df_s.style.apply(color_stock, axis=1).format({
             "Cantidad": "{:.1f}", 
             "Precio Costo": "$ {:.0f}", 
             "Precio Venta": "$ {:.0f}", 
@@ -124,14 +164,25 @@ with tab2:
         }),
         use_container_width=True, hide_index=True
     )
-    df_edit = st.data_editor(df_s, num_rows="dynamic", use_container_width=True, hide_index=True, key="ed_stk")
+    
+    df_edit = st.data_editor(df_s, num_rows="dynamic", use_container_width=True, hide_index=True, key="editor_stock_principal")
     if st.button("💾 Guardar Cambios Inventario"):
         df_edit.to_csv(STOCK_FILE, index=False)
         st.rerun()
 
-# --- TAB 4: GASTOS (CON ALTA DE PRODUCTOS) ---
+# TAB 3: ANÁLISIS 
+with tab3:
+    st.header("Estadísticas")
+    df_v = cargar_datos(VENTAS_FILE)
+    if not df_v.empty:
+        st.line_chart(df_v.set_index("Fecha")["Monto Total"])
+        st.metric("Total Vendido Histórico", f"$ {df_v['Monto Total'].sum():,.2f}")
+    else:
+        st.info("Registrá una venta para ver estadísticas.")
+
+# TAB 4: GASTOS (CON ALTA DE PRODUCTOS)
 with tab4:
-    st.header("Registrar Gastos")
+    st.header("Registrar Gastos / Compras")
     df_g = cargar_datos(GASTOS_FILE)
     df_s = cargar_datos(STOCK_FILE)
     
@@ -140,8 +191,11 @@ with tab4:
 
     with st.form("form_gastos", clear_on_submit=True):
         n_nom = ""
+        n_un = "un."
         if sel_gasto == "+ AGREGAR PRODUCTO NUEVO":
-            n_nom = st.text_input("Nombre del nuevo material")
+            c_n1, c_n2 = st.columns(2)
+            n_nom = c_n1.text_input("Nombre del nuevo material")
+            n_un = c_n2.selectbox("Unidad", ["un.", "kg", "m", "bolsas", "m3"])
         
         c_g1, c_g2 = st.columns(2)
         cant_g = c_g1.number_input("Cantidad", min_value=0.1)
@@ -149,74 +203,98 @@ with tab4:
         
         if st.form_submit_button("Confirmar Gasto"):
             item = n_nom if sel_gasto == "+ AGREGAR PRODUCTO NUEVO" else sel_gasto
+            
+            # Si es nuevo, lo crea en Stock
             if sel_gasto == "+ AGREGAR PRODUCTO NUEVO":
-                nueva_f = pd.DataFrame([{"Producto": n_nom, "Cantidad": cant_g, "Unidad": "un.", "Precio Costo": monto_g/cant_g, "Precio Venta": 0.0, "Stock Minimo": 0.0}])
-                df_s = pd.concat([df_s, nueva_f], ignore_index=True)
+                if n_nom:
+                    # Calculamos costo unitario aproximado
+                    costo_unit = monto_g / cant_g if cant_g > 0 else 0
+                    nueva_f = pd.DataFrame([{"Producto": n_nom, "Cantidad": cant_g, "Unidad": n_un, "Precio Costo": costo_unit, "Precio Venta": 0.0, "Stock Minimo": 5.0}])
+                    df_s = pd.concat([df_s, nueva_f], ignore_index=True)
+                else:
+                    st.error("Debes escribir un nombre para el producto nuevo.")
+                    st.stop()
             else:
+                # Si existe, suma stock
                 df_s.loc[df_s["Producto"] == item, "Cantidad"] += cant_g
             
+            # Guarda Gasto y Stock
             pd.concat([df_g, pd.DataFrame([{"Fecha": date.today(), "Insumo": item, "Cantidad": cant_g, "Monto": monto_g}])]).to_csv(GASTOS_FILE, index=False)
             df_s.to_csv(STOCK_FILE, index=False)
             st.success("Gasto registrado y stock actualizado.")
             st.rerun()
 
-# --- TAB 5: FABRICACIÓN (SISTEMA DE RECETAS DINÁMICAS) ---
+# TAB 5: FABRICACIÓN
 with tab5:
-    st.header("⚒️ Producción y Recetas Dinámicas")
-    st.info("Aquí puedes crear cualquier ítem (como Tubos) y definir qué materiales usa.")
+    st.header("⚒️ Producción y Recetas")
+    st.markdown("""
+    **¿Cómo funciona?**
+    1. En la tabla de arriba ("Configurar Recetas"), escribí el nombre de lo que querés fabricar (ej: **Tubo Cemento**).
+    2. Elegí qué material usa y cuánto.
+    3. Luego, usá el formulario de abajo para registrar la fabricación.
+    """)
     
     df_r = cargar_datos(RECETAS_FILE)
     df_s_actual = cargar_datos(STOCK_FILE)
 
-    # PARTE A: Definir la receta
-    st.subheader("1. Configurar Recetas de Fabricación")
+    # 1. CONFIGURACIÓN DE RECETAS 
+    st.subheader("1. Configurar Recetas")
     df_r_edit = st.data_editor(
         df_r,
         num_rows="dynamic",
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Producto Final": st.column_config.TextColumn("¿Qué estás fabricando?", help="Ej: Tubo de Cemento"),
-            "Insumo": st.column_config.SelectboxColumn("Material necesario", options=df_s_actual["Producto"].tolist()),
-            "Cantidad": st.column_config.NumberColumn("Cantidad por unidad", format="%.2f")
+            "Producto Final": st.column_config.TextColumn("Producto a Fabricar", help="Escribí aquí el nombre del producto nuevo (ej: Tubo 1m)"),
+            "Insumo": st.column_config.SelectboxColumn("Insumo del Stock", options=df_s_actual["Producto"].unique().tolist()),
+            "Cantidad": st.column_config.NumberColumn("Cantidad usada por unidad", format="%.2f")
         }
     )
-    if st.button("💾 Guardar / Actualizar Recetas"):
+    if st.button("💾 Guardar Recetas"):
         df_r_edit.to_csv(RECETAS_FILE, index=False)
-        st.success("Recetas guardadas.")
+        st.success("Recetas actualizadas. Ahora aparecen en el menú de abajo.")
         st.rerun()
 
     st.divider()
     
-    # PARTE B: Registrar fabricación
-    st.subheader("2. Registrar Fabricación del Día")
-    prods_finales = df_r["Producto Final"].unique().tolist()
+    # 2. REGISTRO DE FABRICACIÓN
+    st.subheader("2. Registrar Producción del Día")
     
-    if not prods_finales:
-        st.warning("Primero define una receta arriba para poder fabricar.")
+    # Obtenemos la lista única de cosas que tienen receta
+    prods_fabricables = df_r["Producto Final"].unique().tolist()
+    
+    if not prods_fabricables:
+        st.warning("No hay recetas definidas. Agregá una en la tabla de arriba.")
     else:
         with st.form("ejecutar_fab"):
-            prod_hacer = st.selectbox("Seleccionar producto fabricado", options=prods_finales)
-            cant_hacer = st.number_input("Cantidad de piezas terminadas", min_value=1)
+            prod_hacer = st.selectbox("¿Qué fabricaste hoy?", options=prods_fabricables)
+            cant_hacer = st.number_input("Cantidad fabricada", min_value=1)
             
+            # Mostrar vista previa de descuento
             receta_selec = df_r[df_r["Producto Final"] == prod_hacer]
-            st.write("**Materiales que se descontarán automáticamente:**")
+            st.write("**Materiales que se descontarán:**")
             for _, fila in receta_selec.iterrows():
                 st.write(f"- {fila['Insumo']}: {fila['Cantidad'] * cant_hacer:.2f}")
 
-            if st.form_submit_button("🚀 Finalizar y Descontar Materiales"):
+            if st.form_submit_button("🚀 Finalizar y Descontar"):
                 df_stk = cargar_datos(STOCK_FILE)
-                # Sumar producto terminado
+                
+                # A. Sumar el producto terminado al stock (si no existe, se crea)
                 if prod_hacer not in df_stk["Producto"].values:
-                    nueva_f = pd.DataFrame([{"Producto": prod_hacer, "Cantidad": cant_hacer, "Unidad": "un.", "Precio Venta": 0.0}])
+                    nueva_f = pd.DataFrame([{"Producto": prod_hacer, "Cantidad": cant_hacer, "Unidad": "un.", "Precio Costo": 0.0, "Precio Venta": 0.0, "Stock Minimo": 0.0}])
                     df_stk = pd.concat([df_stk, nueva_f], ignore_index=True)
                 else:
                     df_stk.loc[df_stk["Producto"] == prod_hacer, "Cantidad"] += cant_hacer
                 
-                # Restar insumos de la receta
+                # B. Restar los insumos
                 for _, fila in receta_selec.iterrows():
-                    df_stk.loc[df_stk["Producto"] == fila['Insumo'], "Cantidad"] -= (fila['Cantidad'] * cant_hacer)
+                    insumo_nombre = fila['Insumo']
+                    cantidad_a_restar = fila['Cantidad'] * cant_hacer
+                    
+                    # Verificamos que el insumo exista en stock para no dar error
+                    if insumo_nombre in df_stk["Producto"].values:
+                        df_stk.loc[df_stk["Producto"] == insumo_nombre, "Cantidad"] -= cantidad_a_restar
                 
                 df_stk.to_csv(STOCK_FILE, index=False)
-                st.success(f"¡Fabricación de {cant_hacer} {prod_hacer} registrada!")
+                st.success(f"¡Producción de {cant_hacer} {prod_hacer} registrada!")
                 st.rerun()
