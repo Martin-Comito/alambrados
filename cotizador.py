@@ -8,6 +8,15 @@ from datetime import date
 
 # CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="Gestión Del Carmen - Sistema Integral", layout="wide")
+# Ocultar menú de hamburguesa y pie de página de Streamlit
+hide_menu_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """
+st.markdown(hide_menu_style, unsafe_allow_html=True)
 
 # Rutas de archivos
 STOCK_FILE = "stock_del_carmen.csv"
@@ -303,4 +312,5 @@ with tab6:
                         df_e.at[index, "Estado"] = "Entregado"
                         df_e.to_csv(ENTREGAS_FILE, index=False)
                         st.rerun()
+
 
