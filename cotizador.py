@@ -1,27 +1,57 @@
 import streamlit as st
 import pandas as pd
 import os
+import io # Necesario para crear el Excel
 from datetime import date, timedelta, datetime
-import pytz # Librería para Zona Horaria
+import pytz 
 from fpdf import FPDF
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Sistema Alambrados del Carmen", layout="wide", page_icon="🏗️")
+# --- CONFIGURACIÓN DE PÁGINA Y TEMA ---
+st.set_page_config(page_title="Gestión Alambrados del Carmen", layout="wide", page_icon="🏗️")
+
+# ESTILOS CSS PERSONALIZADOS (MARCA ROJA)
+st.markdown("""
+    <style>
+        /* Pintar la barra lateral de Rojo Alambrados */
+        [data-testid="stSidebar"] {
+            background-color: #B71C1C;
+        }
+        /* Texto de la barra lateral en Blanco */
+        [data-testid="stSidebar"] * {
+            color: white !important;
+        }
+        /* Botones primarios en Rojo */
+        div.stButton > button:first-child {
+            background-color: #D32F2F;
+            color: white;
+        }
+        /* Ajustar logo */
+        [data-testid="stSidebar"] img {
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- RUTAS Y ARCHIVOS ---
 STOCK_FILE = "stock_del_carmen.csv"
 GASTOS_FILE = "gastos_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
-LOGO_FILE = "alambradoslogo.jpeg"
+LOGO_FILE = "alambrados.jpeg" # Asegurate que este sea el nombre de tu foto roja
 
-# --- FUNCIÓN HORA ARGENTINA ---
+# --- FUNCIONES DE AYUDA ---
 def ahora_arg():
-    # Define la zona horaria de Buenos Aires
     tz = pytz.timezone('America/Argentina/Buenos_Aires')
     return datetime.now(tz)
 
-# --- LISTA EXACTA DE PRODUCTOS ---
+def generar_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Stock')
+    return output.getvalue()
+
+# --- LISTA INICIAL (BACKUP) ---
 PRODUCTOS_INICIALES = [
     {"Codigo": "3", "Producto": "ADICIONAL PINCHES 20.000", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
     {"Codigo": "6", "Producto": "BOYERITO IMPORTADO X 1000", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
@@ -86,8 +116,7 @@ def cargar_datos_stock():
     df["Codigo"] = df["Codigo"].fillna("").astype(str)
     df["Producto"] = df["Producto"].fillna("").astype(str)
     df["Unidad"] = df["Unidad"].fillna("un.").astype(str)
-    cols_num = ["Cantidad", "Reservado", "Precio Costo", "Precio Venta", "Stock Minimo"]
-    for col in cols_num:
+    for col in ["Cantidad", "Reservado", "Precio Costo", "Precio Venta", "Stock Minimo"]:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
     return df
 
@@ -125,9 +154,7 @@ def generar_pdf(cliente, items, total, tipo_venta):
     pdf.water_mark()
     pdf.set_font("Arial", size=12)
     
-    # FECHA ARGENTINA EXACTA
     fecha_hora = ahora_arg().strftime("%d/%m/%Y %H:%M")
-    
     pdf.cell(200, 10, txt=f"Cliente: {cliente}", ln=True)
     pdf.cell(200, 10, txt=f"Fecha: {fecha_hora} ({tipo_venta})", ln=True)
     pdf.ln(10)
@@ -148,37 +175,37 @@ def generar_pdf(cliente, items, total, tipo_venta):
         pdf.cell(30, 10, f"${item['Precio']:.0f}", 1)
         pdf.cell(30, 10, f"${item['Subtotal']:.0f}", 1)
         pdf.ln()
-    
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(160, 10, "TOTAL", 0)
     pdf.cell(30, 10, f"${total:,.0f}", 0, 1)
-    
     return pdf.output(dest='S').encode('latin-1')
 
 inicializar_archivos()
 if 'carrito' not in st.session_state: st.session_state.carrito = []
 
-# --- BARRA LATERAL ---
+# --- BARRA LATERAL (BRANDING) ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/1055/1055644.png", width=50)
-    st.header("Herramientas")
+    # Mostrar el logo si existe
+    if os.path.exists(LOGO_FILE):
+        st.image(LOGO_FILE, use_container_width=True)
     
-    # Muestra la hora para verificar
+    st.title("Menú")
     hora_actual = ahora_arg().strftime("%H:%M")
-    st.caption(f"🕒 Hora Arg: {hora_actual}")
+    st.caption(f"🕒 {hora_actual} - Carmen de Areco")
 
-    st.warning("Zona de Peligro")
-    if st.button("♻️ RESTAURAR FABRICA"):
+    st.write("---")
+    st.warning("Zona de Administración")
+    if st.button("♻️ RESTAURAR TODO"):
         df_reset = pd.DataFrame(PRODUCTOS_INICIALES)
         cols_stock = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
         for col in cols_stock:
             if col not in df_reset.columns: df_reset[col] = 0.0
         df_reset.to_csv(STOCK_FILE, index=False)
-        st.success("¡Restaurado!")
+        st.success("Sistema restaurado.")
         st.rerun()
 
-# --- INTERFAZ ---
+# --- INTERFAZ PRINCIPAL ---
 st.title("🏗️ Alambrados del Carmen S.A.")
 tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "📦 Stock", "🏭 Producción", "📊 Historial"])
 
@@ -201,7 +228,6 @@ with tab_cot:
             cod = sel_prod.split("]")[0].replace("[", "")
             fila = df_s[df_s["Codigo"] == cod].iloc[0]
             if cant > fila["DISPONIBLE"]: st.toast(f"⚠️ Stock bajo: Quedan {fila['DISPONIBLE']}", icon="⚠️")
-            
             st.session_state.carrito.append({
                 "Codigo": fila["Codigo"], "Producto": fila["Producto"],
                 "Cantidad": cant, "Precio": fila["Precio Venta"],
@@ -216,17 +242,14 @@ with tab_cot:
             st.dataframe(df_c[["Producto", "Cantidad", "Subtotal"]], hide_index=True, use_container_width=True)
             total = df_c["Subtotal"].sum()
             st.metric("Total", f"${total:,.0f}")
-            
             if st.button("Vaciar Carrito"):
                 st.session_state.carrito = []
                 st.rerun()
-            
             st.markdown("---")
             tipo = st.radio("Operación:", ["Entrega Inmediata", "Acopio / Reserva"])
             c_p, c_v = st.columns(2)
             pdf = generar_pdf(cliente, st.session_state.carrito, total, tipo)
-            c_p.download_button("📄 PDF", pdf, f"P_{cliente}.pdf", "application/pdf")
-            
+            c_p.download_button("📄 PDF Presupuesto", pdf, f"P_{cliente}.pdf", "application/pdf")
             if c_v.button("✅ Confirmar Venta", type="primary"):
                 for item in st.session_state.carrito:
                     idx = df_s.index[df_s["Codigo"] == item["Codigo"]].tolist()
@@ -235,8 +258,6 @@ with tab_cot:
                         if "Reserva" in tipo: df_s.at[i, "Reservado"] += item["Cantidad"]
                         else: df_s.at[i, "Cantidad"] -= item["Cantidad"]
                 df_s.to_csv(STOCK_FILE, index=False)
-                
-                # GUARDAR CON FECHA Y HORA EXACTA
                 fecha_hora_str = ahora_arg().strftime("%d/%m/%Y %H:%M")
                 nuevo = pd.DataFrame([{
                     "Fecha": fecha_hora_str, "Cliente": cliente, "Total": total,
@@ -249,18 +270,29 @@ with tab_cot:
                 st.balloons()
                 st.rerun()
 
-# TAB 2: STOCK
+# TAB 2: STOCK (CON DESCARGA EXCEL)
 with tab_stock:
     st.header("📦 Inventario")
     df_s = cargar_datos_stock()
     df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
     
-    with st.expander("✨ Crear Nuevo Producto (Si no está en la lista)", expanded=False):
+    # --- BOTÓN DE EXCEL (NUEVO) ---
+    col_tools1, col_tools2 = st.columns([1, 4])
+    with col_tools1:
+        excel_data = generar_excel(df_s)
+        st.download_button(
+            label="📥 Descargar Excel",
+            data=excel_data,
+            file_name=f"Stock_Alambrados_{date.today()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    
+    with st.expander("✨ Crear Nuevo Producto"):
         c_new1, c_new2, c_new3 = st.columns(3)
-        new_cod = c_new1.text_input("Código Nuevo")
-        new_nom = c_new2.text_input("Nombre Producto")
+        new_cod = c_new1.text_input("Código")
+        new_nom = c_new2.text_input("Nombre")
         new_uni = c_new3.selectbox("Unidad", ["un.", "m", "kg", "pack"])
-        if st.button("Crear Producto"):
+        if st.button("Crear"):
             if new_cod and new_nom:
                 nuevo_prod = pd.DataFrame([{
                     "Codigo": new_cod, "Producto": new_nom, "Unidad": new_uni,
@@ -269,15 +301,13 @@ with tab_stock:
                 }])
                 df_s = pd.concat([df_s, nuevo_prod], ignore_index=True)
                 df_s.to_csv(STOCK_FILE, index=False)
-                st.success(f"Creado: {new_nom}")
                 st.rerun()
-            else: st.error("Falta código o nombre.")
     
-    with st.expander("⚡ Cargar Stock (Lo que llega del proveedor)"):
+    with st.expander("⚡ Ingreso Rápido (Proveedor)"):
         c1, c2, c3 = st.columns([2, 1, 1])
         opc = df_s.apply(lambda x: f"[{x['Codigo']}] {x['Producto']}", axis=1)
-        sel = c1.selectbox("Elegir Producto:", opc)
-        num = c2.number_input("Cantidad que llegó:", min_value=1.0)
+        sel = c1.selectbox("Producto:", opc)
+        num = c2.number_input("Cantidad:", min_value=1.0)
         if c3.button("📥 Sumar"):
             cod = sel.split("]")[0].replace("[", "")
             idx = df_s.index[df_s["Codigo"] == cod].tolist()
@@ -298,7 +328,7 @@ with tab_stock:
             "Precio Venta": st.column_config.NumberColumn("Precio", format="$ %d")
         }
     )
-    if st.button("💾 Guardar Todo"):
+    if st.button("💾 Guardar Cambios"):
         df_edit.to_csv(STOCK_FILE, index=False)
         st.success("Guardado")
         st.rerun()
@@ -306,8 +336,6 @@ with tab_stock:
 # TAB 3: PRODUCCIÓN
 with tab_prod:
     st.header("🏭 Fraguado Inteligente")
-    st.markdown("Si ya fabricaste hace unos días, cambiá la fecha para que el cálculo sea correcto.")
-    
     df_p = cargar_datos_general(PRODUCCION_FILE)
     df_s_act = cargar_datos_stock()
     
@@ -316,47 +344,39 @@ with tab_prod:
         p_fab = c1.selectbox("Producto Fabricado:", df_s_act["Producto"].unique())
         n_fab = c2.number_input("Cantidad:", min_value=1.0)
         c3, c4 = st.columns(2)
+        fecha_elab = c3.date_input("Fecha Elaboración", value=ahora_arg().date())
+        dias_frag = c4.number_input("Días Fraguado", value=28, min_value=0)
         
-        # Fecha Manual: Por defecto HOY (Hora Argentina), pero editable
-        fecha_elab = c3.date_input("Fecha de Elaboración", value=ahora_arg().date())
-        dias_frag = c4.number_input("Días de Fraguado", value=28, min_value=0)
-        
-        if st.form_submit_button("🚀 Registrar Producción"):
+        if st.form_submit_button("🚀 Registrar"):
             fecha_fin = fecha_elab + timedelta(days=dias_frag)
-            
-            # Cálculo exacto usando la fecha elegida vs fecha actual real
             dias_restantes = (fecha_fin - ahora_arg().date()).days
-            
             estado = "En Proceso" if dias_restantes > 0 else "Listo"
             nuevo = pd.DataFrame([{
                 "Fecha_Inicio": fecha_elab, "Producto": p_fab, "Cantidad": n_fab,
                 "Dias_Fraguado": dias_frag, "Fecha_Lista": fecha_fin, "Estado": estado
             }])
             pd.concat([df_p, nuevo]).to_csv(PRODUCCION_FILE, index=False)
-            st.success(f"Registrado. Liberación estimada: {fecha_fin}")
+            st.success(f"Registrado. Libera: {fecha_fin}")
             st.rerun()
 
     st.markdown("---")
-    st.subheader("Estado del Fraguado")
-    
+    st.subheader("Estado")
     if not df_p.empty:
         df_p["Fecha_Lista"] = pd.to_datetime(df_p["Fecha_Lista"]).dt.date
         df_p = df_p[df_p["Estado"] != "Finalizado"]
-        
         for index, row in df_p.iterrows():
             hoy = ahora_arg().date()
             falta = (row["Fecha_Lista"] - hoy).days
-            
             with st.container(border=True):
                 col_txt, col_act = st.columns([4, 1])
                 with col_txt:
                     if falta <= 0:
-                        st.success(f"✅ **LISTO PARA STOCK:** {row['Cantidad']}x {row['Producto']} (Elab: {row['Fecha_Inicio']})")
+                        st.success(f"✅ **LISTO:** {row['Cantidad']}x {row['Producto']}")
                     else:
-                        st.info(f"⏳ **FRAGUANDO:** {row['Cantidad']}x {row['Producto']} | Faltan **{falta} días** (Libera: {row['Fecha_Lista']})")
+                        st.info(f"⏳ **FRAGUANDO:** {row['Cantidad']}x {row['Producto']} | Faltan **{falta} días**")
                 with col_act:
                     if falta <= 0:
-                        if st.button("📥 A STOCK", key=f"lib_{index}"):
+                        if st.button("📥 STOCK", key=f"lib_{index}"):
                             df_stk = cargar_datos_stock()
                             idx = df_stk.index[df_stk["Producto"] == row['Producto']].tolist()
                             if idx:
@@ -365,8 +385,7 @@ with tab_prod:
                                 df_p.at[index, "Estado"] = "Finalizado"
                                 df_p.to_csv(PRODUCCION_FILE, index=False)
                                 st.rerun()
-    else:
-        st.info("No hay producción en proceso.")
+    else: st.info("Nada en producción.")
 
 # TAB 4: HISTORIAL
 with tab_hist:
