@@ -1,34 +1,66 @@
 import streamlit as st
 import pandas as pd
 import os
-import io # Necesario para crear el Excel
+import io
 from datetime import date, timedelta, datetime
-import pytz 
+import pytz
 from fpdf import FPDF
 
-# --- CONFIGURACIÓN DE PÁGINA Y TEMA ---
+# --- AUTO-CONFIGURACIÓN DE TEMA CORPORATIVO (EL SECRETO) ---
+# Esto crea un archivo que fuerza los colores ROJOS de la marca
+def configurar_tema_alambrados():
+    config_dir = ".streamlit"
+    config_path = os.path.join(config_dir, "config.toml")
+    
+    # Definimos el tema rojo/blanco basado en el logo
+    tema_corporativo = """
+[theme]
+base="light"
+primaryColor="#D32F2F"
+backgroundColor="#FFFFFF"
+secondaryBackgroundColor="#F0F2F6"
+textColor="#31333F"
+font="sans serif"
+"""
+    # Si no existe la configuración, la creamos
+    if not os.path.exists(config_path):
+        try:
+            os.makedirs(config_dir, exist_ok=True)
+            with open(config_path, "w") as f:
+                f.write(tema_corporativo)
+            return True # Indica que se creó y necesita reinicio
+        except:
+            pass
+    return False
+
+# Ejecutar configuración antes de nada
+necesita_reinicio = configurar_tema_alambrados()
+
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Gestión Alambrados del Carmen", layout="wide", page_icon="🏗️")
 
-# ESTILOS CSS PERSONALIZADOS (MARCA ROJA)
+# Si se acaba de aplicar el tema nuevo, avisamos al usuario
+if necesita_reinicio:
+    st.warning("🎨 ¡Tema Corporativo Instalado! Por favor, detené la aplicación y volvé a ejecutarla para ver los colores Rojos.")
+    st.stop()
+
+# --- ESTILOS EXTRA (CSS) ---
+# Para terminar de ajustar detalles que el tema automático no cubre
 st.markdown("""
     <style>
-        /* Pintar la barra lateral de Rojo Alambrados */
-        [data-testid="stSidebar"] {
-            background-color: #B71C1C;
-        }
-        /* Texto de la barra lateral en Blanco */
-        [data-testid="stSidebar"] * {
-            color: white !important;
-        }
-        /* Botones primarios en Rojo */
-        div.stButton > button:first-child {
-            background-color: #D32F2F;
-            color: white;
-        }
-        /* Ajustar logo */
+        /* Agrandar el logo en la barra lateral */
         [data-testid="stSidebar"] img {
-            border-radius: 10px;
-            margin-bottom: 20px;
+            margin-top: 20px;
+            border-radius: 5px;
+            border: 2px solid #D32F2F;
+        }
+        /* Títulos en Rojo Institucional */
+        h1, h2, h3 {
+            color: #B71C1C !important;
+        }
+        /* Destacar métricas */
+        [data-testid="stMetricValue"] {
+            color: #D32F2F;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -38,12 +70,15 @@ STOCK_FILE = "stock_del_carmen.csv"
 GASTOS_FILE = "gastos_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
-LOGO_FILE = "alambrados.jpeg" # Asegurate que este sea el nombre de tu foto roja
+LOGO_FILE = "alambrados.jpeg" # El logo rojo
 
-# --- FUNCIONES DE AYUDA ---
+# --- FUNCIONES ---
 def ahora_arg():
-    tz = pytz.timezone('America/Argentina/Buenos_Aires')
-    return datetime.now(tz)
+    try:
+        tz = pytz.timezone('America/Argentina/Buenos_Aires')
+        return datetime.now(tz)
+    except:
+        return datetime.now()
 
 def generar_excel(df):
     output = io.BytesIO()
@@ -51,122 +86,62 @@ def generar_excel(df):
         df.to_excel(writer, index=False, sheet_name='Stock')
     return output.getvalue()
 
-# --- LISTA INICIAL (BACKUP) ---
-PRODUCTOS_INICIALES = [
-    {"Codigo": "3", "Producto": "ADICIONAL PINCHES 20.000", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "6", "Producto": "BOYERITO IMPORTADO X 1000", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "3", "Producto": "CONCERTINA DOBLE CRUZADA X 45", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "2", "Producto": "CONCERTINA SIMPLE", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "1", "Producto": "DECO 1.50", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "0", "Producto": "DECO 1.80", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "3", "Producto": "ESPARRAGOS", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "25", "Producto": "ESQUINERO OLIMPICO", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "2", "Producto": "ESQUINERO RECTO", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "15", "Producto": "GALVA 14 X KILO", "Unidad": "kg", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "5", "Producto": "GALVA 18", "Unidad": "kg", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "31", "Producto": "GANCHOS ESTIRATEJIDOS 5/16", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "15", "Producto": "OVALADO X MAYOR X 1000", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "32", "Producto": "PALOMITAS", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "24", "Producto": "PINCHES X METRO PINCHOSOS", "Unidad": "m", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "41", "Producto": "PLANCHUELA 1.00", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "40", "Producto": "PLANCHUELA 1.20", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "35", "Producto": "PLANCHUELA 1.50", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "34", "Producto": "PLANCHUELA 2.00", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "47", "Producto": "PORTON 3.00 X 1.80 BLACK", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "9", "Producto": "PORTON DE CANO X 4.00", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "10", "Producto": "PORTON INDUSTRIAL X 4.00", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "51", "Producto": "PORTON LIVIANO 1.80 X 3.00 CANO", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "53", "Producto": "PORTON LIVIANO 1.80X 3.00", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "11", "Producto": "PORTON SIMPLE X 3.00", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "54", "Producto": "POSTE DE MADERA", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "27", "Producto": "POSTE OLIMPICO", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "28", "Producto": "POSTE RECTO", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "57", "Producto": "POSTE REDONDE ECO OBRA", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "14", "Producto": "PUA X MAYOR X500", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "43", "Producto": "PUA X METRO", "Unidad": "m", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "16", "Producto": "PUERTITA CLASICA 1.50", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "12", "Producto": "PUERTITA CORAZON 1.5 X 1.00", "Unidad": "un.", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "55", "Producto": "TEJIDO 1.50", "Unidad": "m", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "19", "Producto": "TEJIDO 2.00 X METRO", "Unidad": "m", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "59", "Producto": "TEJIDO DE OBRA 1.50", "Unidad": "m", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "63", "Producto": "TEJIDO DE OBRA 1.80", "Unidad": "m", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "50", "Producto": "TEJIDO DEL 12 - 2 PULGADAS", "Unidad": "m", "Precio Venta": 0, "Cantidad": 0},
-    {"Codigo": "18", "Producto": "TEJIDO RECU 1.8", "Unidad": "m", "Precio Venta": 0, "Cantidad": 0}
-]
-
-# --- INICIALIZACIÓN ---
-def inicializar_archivos():
-    cols_stock = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
-    
-    if not os.path.exists(STOCK_FILE):
-        df_init = pd.DataFrame(PRODUCTOS_INICIALES)
-        for col in cols_stock:
-            if col not in df_init.columns: df_init[col] = 0.0
-        df_init.to_csv(STOCK_FILE, index=False)
-    
-    if not os.path.exists(PRODUCCION_FILE):
-        pd.DataFrame(columns=["Fecha_Inicio", "Producto", "Cantidad", "Dias_Fraguado", "Fecha_Lista", "Estado"]).to_csv(PRODUCCION_FILE, index=False)
-    if not os.path.exists(GASTOS_FILE):
-        pd.DataFrame(columns=["Fecha", "Insumo", "Cantidad", "Monto"]).to_csv(GASTOS_FILE, index=False)
-    if not os.path.exists(VENTAS_FILE):
-        pd.DataFrame(columns=["Fecha", "Cliente", "Total", "Tipo_Entrega", "Detalle"]).to_csv(VENTAS_FILE, index=False)
-
 def cargar_datos_stock():
+    if not os.path.exists(STOCK_FILE): return pd.DataFrame(columns=["Codigo","Producto","Cantidad","Reservado","Unidad","Precio Costo","Precio Venta","Stock Minimo"])
     df = pd.read_csv(STOCK_FILE)
+    # Limpieza de datos
     df["Codigo"] = df["Codigo"].fillna("").astype(str)
     df["Producto"] = df["Producto"].fillna("").astype(str)
     df["Unidad"] = df["Unidad"].fillna("un.").astype(str)
     for col in ["Cantidad", "Reservado", "Precio Costo", "Precio Venta", "Stock Minimo"]:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
     return df
 
-def cargar_datos_general(archivo):
+def cargar_datos_general(archivo, cols):
+    if not os.path.exists(archivo): return pd.DataFrame(columns=cols)
     return pd.read_csv(archivo)
 
 # --- CLASE PDF ---
 class PDF(FPDF):
     def header(self):
-        # Logo a la DERECHA
         if os.path.exists(LOGO_FILE):
             try: self.image(LOGO_FILE, 170, 8, 30) 
             except: pass
         self.set_font('Arial', 'B', 15)
+        self.set_text_color(183, 28, 28) # Rojo oscuro para el título
         self.cell(80)
         self.cell(30, 10, 'PRESUPUESTO', 0, 0, 'C')
         self.ln(20)
+        self.set_text_color(0, 0, 0) # Volver a negro
 
     def footer(self):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, 'Alambrados del Carmen S.A.', 0, 0, 'C')
-
-    def water_mark(self):
-        if os.path.exists(LOGO_FILE):
-            try:
-                self.set_alpha(0.15)
-                self.image(LOGO_FILE, x=55, y=80, w=100)
-                self.set_alpha(1)
-            except: pass
+        self.cell(0, 10, 'Alambrados del Carmen S.A. - Haciendo clientes felices', 0, 0, 'C')
 
 def generar_pdf(cliente, items, total, tipo_venta):
     pdf = PDF()
     pdf.add_page()
-    pdf.water_mark()
     pdf.set_font("Arial", size=12)
-    
     fecha_hora = ahora_arg().strftime("%d/%m/%Y %H:%M")
+    
     pdf.cell(200, 10, txt=f"Cliente: {cliente}", ln=True)
     pdf.cell(200, 10, txt=f"Fecha: {fecha_hora} ({tipo_venta})", ln=True)
     pdf.ln(10)
     
+    # Encabezado Tabla Rojo
+    pdf.set_fill_color(211, 47, 47) 
+    pdf.set_text_color(255, 255, 255)
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(20, 10, "Cod", 1)
-    pdf.cell(90, 10, "Producto", 1)
-    pdf.cell(20, 10, "Cant", 1)
-    pdf.cell(30, 10, "Unit", 1)
-    pdf.cell(30, 10, "Total", 1)
-    pdf.ln()
+    pdf.cell(20, 10, "Cod", 1, 0, 'C', True)
+    pdf.cell(90, 10, "Producto", 1, 0, 'C', True)
+    pdf.cell(20, 10, "Cant", 1, 0, 'C', True)
+    pdf.cell(30, 10, "Unit", 1, 0, 'C', True)
+    pdf.cell(30, 10, "Total", 1, 1, 'C', True)
     
+    # Filas
+    pdf.set_text_color(0, 0, 0)
     pdf.set_font("Arial", size=10)
     for item in items:
         pdf.cell(20, 10, str(item['Codigo']), 1)
@@ -175,219 +150,176 @@ def generar_pdf(cliente, items, total, tipo_venta):
         pdf.cell(30, 10, f"${item['Precio']:.0f}", 1)
         pdf.cell(30, 10, f"${item['Subtotal']:.0f}", 1)
         pdf.ln()
+    
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(160, 10, "TOTAL", 0)
+    pdf.cell(160, 10, "TOTAL FINAL", 0)
+    pdf.set_text_color(183, 28, 28)
     pdf.cell(30, 10, f"${total:,.0f}", 0, 1)
     return pdf.output(dest='S').encode('latin-1')
 
-inicializar_archivos()
+# Inicializar Carrito
 if 'carrito' not in st.session_state: st.session_state.carrito = []
 
-# --- BARRA LATERAL (BRANDING) ---
+# --- BARRA LATERAL ---
 with st.sidebar:
-    # Mostrar el logo si existe
     if os.path.exists(LOGO_FILE):
         st.image(LOGO_FILE, use_container_width=True)
+    else:
+        st.title("AC")
     
-    st.title("Menú")
-    hora_actual = ahora_arg().strftime("%H:%M")
-    st.caption(f"🕒 {hora_actual} - Carmen de Areco")
-
     st.write("---")
-    st.warning("Zona de Administración")
-    if st.button("♻️ RESTAURAR TODO"):
-        df_reset = pd.DataFrame(PRODUCTOS_INICIALES)
-        cols_stock = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
-        for col in cols_stock:
-            if col not in df_reset.columns: df_reset[col] = 0.0
-        df_reset.to_csv(STOCK_FILE, index=False)
-        st.success("Sistema restaurado.")
-        st.rerun()
+    st.caption(f"📅 {ahora_arg().strftime('%d/%m/%Y')}")
+    st.caption(f"🕒 {ahora_arg().strftime('%H:%M')}")
+    st.write("---")
+
+    # Botón de Reseteo (Oculto en expander para seguridad)
+    with st.expander("⚙️ Admin"):
+        if st.button("♻️ Restaurar Todo"):
+             # Borramos archivos para reiniciar
+             if os.path.exists(STOCK_FILE): os.remove(STOCK_FILE)
+             st.success("Reiniciando sistema...")
+             st.rerun()
 
 # --- INTERFAZ PRINCIPAL ---
-st.title("🏗️ Alambrados del Carmen S.A.")
+st.title("Gestión Comercial")
+
 tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "📦 Stock", "🏭 Producción", "📊 Historial"])
 
-# TAB 1: COTIZADOR
+# 1. COTIZADOR
 with tab_cot:
     df_s = cargar_datos_stock()
-    df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
-    col_izq, col_der = st.columns([1, 1])
-    
-    with col_izq:
-        st.subheader("1. Pedido")
-        cliente = st.text_input("Cliente")
-        st.write("---")
-        opciones = df_s.apply(lambda x: f"[{x['Codigo']}] {x['Producto']} (Disp: {x['DISPONIBLE']:.0f})", axis=1)
-        sel_prod = st.selectbox("Producto:", ["Seleccionar..."] + list(opciones))
-        c_cant, c_add = st.columns([1, 2])
-        cant = c_cant.number_input("Cantidad", min_value=1.0, value=1.0)
-        
-        if c_add.button("➕ Agregar") and sel_prod != "Seleccionar...":
-            cod = sel_prod.split("]")[0].replace("[", "")
-            fila = df_s[df_s["Codigo"] == cod].iloc[0]
-            if cant > fila["DISPONIBLE"]: st.toast(f"⚠️ Stock bajo: Quedan {fila['DISPONIBLE']}", icon="⚠️")
-            st.session_state.carrito.append({
-                "Codigo": fila["Codigo"], "Producto": fila["Producto"],
-                "Cantidad": cant, "Precio": fila["Precio Venta"],
-                "Subtotal": cant * fila["Precio Venta"]
-            })
-            st.rerun()
+    # Si el DF está vacío (primer uso tras reset), creamos columnas
+    if df_s.empty and "Cantidad" not in df_s.columns:
+         st.info("⚠️ La base de datos está vacía. Cargá productos en la pestaña STOCK.")
+    else:
+        if "Reservado" not in df_s.columns: df_s["Reservado"] = 0.0
+        df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
 
-    with col_der:
-        st.subheader("2. Detalle")
-        if st.session_state.carrito:
-            df_c = pd.DataFrame(st.session_state.carrito)
-            st.dataframe(df_c[["Producto", "Cantidad", "Subtotal"]], hide_index=True, use_container_width=True)
-            total = df_c["Subtotal"].sum()
-            st.metric("Total", f"${total:,.0f}")
-            if st.button("Vaciar Carrito"):
-                st.session_state.carrito = []
-                st.rerun()
-            st.markdown("---")
-            tipo = st.radio("Operación:", ["Entrega Inmediata", "Acopio / Reserva"])
-            c_p, c_v = st.columns(2)
-            pdf = generar_pdf(cliente, st.session_state.carrito, total, tipo)
-            c_p.download_button("📄 PDF Presupuesto", pdf, f"P_{cliente}.pdf", "application/pdf")
-            if c_v.button("✅ Confirmar Venta", type="primary"):
-                for item in st.session_state.carrito:
-                    idx = df_s.index[df_s["Codigo"] == item["Codigo"]].tolist()
-                    if idx:
-                        i = idx[0]
-                        if "Reserva" in tipo: df_s.at[i, "Reservado"] += item["Cantidad"]
-                        else: df_s.at[i, "Cantidad"] -= item["Cantidad"]
-                df_s.to_csv(STOCK_FILE, index=False)
-                fecha_hora_str = ahora_arg().strftime("%d/%m/%Y %H:%M")
-                nuevo = pd.DataFrame([{
-                    "Fecha": fecha_hora_str, "Cliente": cliente, "Total": total,
-                    "Tipo_Entrega": "Reserva" if "Reserva" in tipo else "Inmediata",
-                    "Detalle": str([x["Producto"] for x in st.session_state.carrito])
-                }])
-                pd.concat([cargar_datos_general(VENTAS_FILE), nuevo]).to_csv(VENTAS_FILE, index=False)
-                st.session_state.carrito = []
-                st.success("¡Venta Registrada!")
-                st.balloons()
+        col_izq, col_der = st.columns([1, 1])
+        with col_izq:
+            st.subheader("Datos del Pedido")
+            cliente = st.text_input("Nombre Cliente")
+            st.write("") # Espacio
+            
+            # Buscador
+            opciones = df_s.apply(lambda x: f"[{x['Codigo']}] {x['Producto']} (Disp: {x['DISPONIBLE']:.0f})", axis=1)
+            sel_prod = st.selectbox("Buscar Producto:", ["Seleccionar..."] + list(opciones))
+            
+            c_cant, c_add = st.columns([1, 2])
+            cant = c_cant.number_input("Cantidad", min_value=1.0, value=1.0)
+            
+            if c_add.button("➕ AGREGAR ITEM", use_container_width=True) and sel_prod != "Seleccionar...":
+                cod = sel_prod.split("]")[0].replace("[", "")
+                fila = df_s[df_s["Codigo"] == cod].iloc[0]
+                
+                item = {
+                    "Codigo": fila["Codigo"], "Producto": fila["Producto"],
+                    "Cantidad": cant, "Precio": fila["Precio Venta"],
+                    "Subtotal": cant * fila["Precio Venta"]
+                }
+                st.session_state.carrito.append(item)
                 st.rerun()
 
-# TAB 2: STOCK (CON DESCARGA EXCEL)
+        with col_der:
+            st.subheader("Carrito")
+            if st.session_state.carrito:
+                df_c = pd.DataFrame(st.session_state.carrito)
+                st.dataframe(df_c[["Producto", "Cantidad", "Subtotal"]], hide_index=True, use_container_width=True)
+                
+                total = df_c["Subtotal"].sum()
+                st.divider()
+                c_tot, c_trash = st.columns([3,1])
+                c_tot.metric("TOTAL A COBRAR", f"${total:,.0f}")
+                if c_trash.button("🗑️", help="Borrar todo"):
+                    st.session_state.carrito = []
+                    st.rerun()
+                
+                st.divider()
+                st.write("Confirmación:")
+                tipo = st.radio("Destino mercadería:", ["Entrega Inmediata", "Dejar en Acopio"], horizontal=True)
+                
+                c_pdf, c_ok = st.columns(2)
+                
+                # PDF
+                pdf_bytes = generar_pdf(cliente, st.session_state.carrito, total, tipo)
+                c_pdf.download_button("📄 Imprimir Presupuesto", pdf_bytes, f"P_{cliente}.pdf", "application/pdf", use_container_width=True)
+                
+                if c_ok.button("✅ REGISTRAR VENTA", type="primary", use_container_width=True):
+                    # Actualizar Stock
+                    for item in st.session_state.carrito:
+                        idx = df_s.index[df_s["Codigo"] == item["Codigo"]].tolist()
+                        if idx:
+                            i = idx[0]
+                            if "Acopio" in tipo: df_s.at[i, "Reservado"] += item["Cantidad"]
+                            else: df_s.at[i, "Cantidad"] -= item["Cantidad"]
+                    df_s.to_csv(STOCK_FILE, index=False)
+                    
+                    # Guardar Venta
+                    nuevo = pd.DataFrame([{
+                        "Fecha": ahora_arg().strftime("%d/%m/%Y %H:%M"), 
+                        "Cliente": cliente, "Total": total, "Tipo": tipo,
+                        "Detalle": str([x["Producto"] for x in st.session_state.carrito])
+                    }])
+                    hist = cargar_datos_general(VENTAS_FILE, ["Fecha","Cliente","Total","Tipo","Detalle"])
+                    pd.concat([hist, nuevo]).to_csv(VENTAS_FILE, index=False)
+                    
+                    st.session_state.carrito = []
+                    st.success("¡Venta Exitosa!")
+                    st.rerun()
+
+# 2. STOCK
 with tab_stock:
-    st.header("📦 Inventario")
     df_s = cargar_datos_stock()
-    df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
-    
-    # --- BOTÓN DE EXCEL (NUEVO) ---
-    col_tools1, col_tools2 = st.columns([1, 4])
-    with col_tools1:
-        excel_data = generar_excel(df_s)
-        st.download_button(
-            label="📥 Descargar Excel",
-            data=excel_data,
-            file_name=f"Stock_Alambrados_{date.today()}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    
-    with st.expander("✨ Crear Nuevo Producto"):
-        c_new1, c_new2, c_new3 = st.columns(3)
-        new_cod = c_new1.text_input("Código")
-        new_nom = c_new2.text_input("Nombre")
-        new_uni = c_new3.selectbox("Unidad", ["un.", "m", "kg", "pack"])
-        if st.button("Crear"):
-            if new_cod and new_nom:
-                nuevo_prod = pd.DataFrame([{
-                    "Codigo": new_cod, "Producto": new_nom, "Unidad": new_uni,
-                    "Cantidad": 0.0, "Reservado": 0.0, "Precio Costo": 0.0,
-                    "Precio Venta": 0.0, "Stock Minimo": 0.0
-                }])
-                df_s = pd.concat([df_s, nuevo_prod], ignore_index=True)
-                df_s.to_csv(STOCK_FILE, index=False)
-                st.rerun()
-    
-    with st.expander("⚡ Ingreso Rápido (Proveedor)"):
-        c1, c2, c3 = st.columns([2, 1, 1])
-        opc = df_s.apply(lambda x: f"[{x['Codigo']}] {x['Producto']}", axis=1)
-        sel = c1.selectbox("Producto:", opc)
-        num = c2.number_input("Cantidad:", min_value=1.0)
-        if c3.button("📥 Sumar"):
-            cod = sel.split("]")[0].replace("[", "")
-            idx = df_s.index[df_s["Codigo"] == cod].tolist()
-            if idx:
-                df_s.at[idx[0], "Cantidad"] += num
-                df_s.to_csv(STOCK_FILE, index=False)
-                st.rerun()
+    if not df_s.empty:
+        df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
 
-    st.subheader("Listado Maestro")
+    c_head, c_btn = st.columns([4, 1])
+    c_head.subheader("Inventario Maestro")
+    c_btn.download_button("📥 Excel", generar_excel(df_s), f"Stock_{date.today()}.xlsx")
+
+    # Tabla Editable
     df_edit = st.data_editor(
-        df_s, key="stock_editor_final", num_rows="dynamic", use_container_width=True, hide_index=True,
+        df_s, key="editor_stock", num_rows="dynamic", use_container_width=True, hide_index=True,
         column_order=["Codigo", "Producto", "DISPONIBLE", "Cantidad", "Reservado", "Unidad", "Precio Venta"],
         column_config={
             "Codigo": st.column_config.TextColumn("Cód"),
-            "DISPONIBLE": st.column_config.NumberColumn("✅ Disp.", disabled=True, format="%.0f"),
+            "DISPONIBLE": st.column_config.NumberColumn("✅ VENDIBLE", disabled=True, format="%.0f"),
             "Cantidad": st.column_config.NumberColumn("Físico", format="%.0f"),
-            "Reservado": st.column_config.NumberColumn("Reserva", format="%.0f"),
+            "Reservado": st.column_config.NumberColumn("Reservado", format="%.0f"),
             "Precio Venta": st.column_config.NumberColumn("Precio", format="$ %d")
         }
     )
-    if st.button("💾 Guardar Cambios"):
+    if st.button("💾 GUARDAR CAMBIOS DE STOCK", type="primary"):
         df_edit.to_csv(STOCK_FILE, index=False)
-        st.success("Guardado")
+        st.success("Inventario Actualizado")
         st.rerun()
 
-# TAB 3: PRODUCCIÓN
+# 3. PRODUCCION
 with tab_prod:
-    st.header("🏭 Fraguado Inteligente")
-    df_p = cargar_datos_general(PRODUCCION_FILE)
-    df_s_act = cargar_datos_stock()
+    st.subheader("Control de Fraguado")
+    df_prod = cargar_datos_general(PRODUCCION_FILE, ["Fecha_Inicio","Producto","Cantidad","Fecha_Lista","Estado"])
+    df_stk = cargar_datos_stock()
     
-    with st.form("form_prod"):
-        c1, c2 = st.columns(2)
-        p_fab = c1.selectbox("Producto Fabricado:", df_s_act["Producto"].unique())
-        n_fab = c2.number_input("Cantidad:", min_value=1.0)
-        c3, c4 = st.columns(2)
-        fecha_elab = c3.date_input("Fecha Elaboración", value=ahora_arg().date())
-        dias_frag = c4.number_input("Días Fraguado", value=28, min_value=0)
-        
-        if st.form_submit_button("🚀 Registrar"):
-            fecha_fin = fecha_elab + timedelta(days=dias_frag)
-            dias_restantes = (fecha_fin - ahora_arg().date()).days
-            estado = "En Proceso" if dias_restantes > 0 else "Listo"
-            nuevo = pd.DataFrame([{
-                "Fecha_Inicio": fecha_elab, "Producto": p_fab, "Cantidad": n_fab,
-                "Dias_Fraguado": dias_frag, "Fecha_Lista": fecha_fin, "Estado": estado
-            }])
-            pd.concat([df_p, nuevo]).to_csv(PRODUCCION_FILE, index=False)
-            st.success(f"Registrado. Libera: {fecha_fin}")
+    with st.form("new_prod"):
+        c1, c2, c3, c4 = st.columns([2,1,1,1])
+        prod = c1.selectbox("Producto", df_stk["Producto"].unique() if not df_stk.empty else [])
+        cant = c2.number_input("Cant", 1)
+        fecha = c3.date_input("Fecha Elab.", value=ahora_arg().date())
+        dias = c4.number_input("Días", 28)
+        if st.form_submit_button("Registrar"):
+            fin = fecha + timedelta(days=dias)
+            estado = "En Proceso" if (fin - ahora_arg().date()).days > 0 else "Listo"
+            nuevo = pd.DataFrame([{"Fecha_Inicio": fecha, "Producto": prod, "Cantidad": cant, "Fecha_Lista": fin, "Estado": estado}])
+            pd.concat([df_prod, nuevo]).to_csv(PRODUCCION_FILE, index=False)
             st.rerun()
+            
+    if not df_prod.empty:
+        df_prod["Fecha_Lista"] = pd.to_datetime(df_prod["Fecha_Lista"]).dt.date
+        activos = df_prod[df_prod["Estado"] != "Finalizado"]
+        st.dataframe(activos, use_container_width=True)
 
-    st.markdown("---")
-    st.subheader("Estado")
-    if not df_p.empty:
-        df_p["Fecha_Lista"] = pd.to_datetime(df_p["Fecha_Lista"]).dt.date
-        df_p = df_p[df_p["Estado"] != "Finalizado"]
-        for index, row in df_p.iterrows():
-            hoy = ahora_arg().date()
-            falta = (row["Fecha_Lista"] - hoy).days
-            with st.container(border=True):
-                col_txt, col_act = st.columns([4, 1])
-                with col_txt:
-                    if falta <= 0:
-                        st.success(f"✅ **LISTO:** {row['Cantidad']}x {row['Producto']}")
-                    else:
-                        st.info(f"⏳ **FRAGUANDO:** {row['Cantidad']}x {row['Producto']} | Faltan **{falta} días**")
-                with col_act:
-                    if falta <= 0:
-                        if st.button("📥 STOCK", key=f"lib_{index}"):
-                            df_stk = cargar_datos_stock()
-                            idx = df_stk.index[df_stk["Producto"] == row['Producto']].tolist()
-                            if idx:
-                                df_stk.at[idx[0], "Cantidad"] += row['Cantidad']
-                                df_stk.to_csv(STOCK_FILE, index=False)
-                                df_p.at[index, "Estado"] = "Finalizado"
-                                df_p.to_csv(PRODUCCION_FILE, index=False)
-                                st.rerun()
-    else: st.info("Nada en producción.")
-
-# TAB 4: HISTORIAL
+# 4. HISTORIAL
 with tab_hist:
-    st.header("Historial")
-    st.dataframe(cargar_datos_general(VENTAS_FILE), use_container_width=True)
+    st.subheader("Registro de Ventas")
+    st.dataframe(cargar_datos_general(VENTAS_FILE, []), use_container_width=True)
