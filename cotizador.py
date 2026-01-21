@@ -48,6 +48,55 @@ VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
 LOGO_FILE = "alambrados.jpeg"
 
+# --- LISTA COMPLETA DE LA FOTO (CON LOS FALTANTES) ---
+PRODUCTOS_INICIALES = [
+    {"Codigo": "3", "Producto": "ADICIONAL PINCHES 20.000", "Unidad": "un."},
+    {"Codigo": "6", "Producto": "BOYERITO IMPORTADO X 1000", "Unidad": "un."},
+    {"Codigo": "3", "Producto": "CONCERTINA DOBLE CRUZADA X 45", "Unidad": "un."},
+    {"Codigo": "2", "Producto": "CONCERTINA SIMPLE", "Unidad": "un."},
+    {"Codigo": "1", "Producto": "DECO 1.50", "Unidad": "un."},
+    {"Codigo": "0", "Producto": "DECO 1.80", "Unidad": "un."},
+    {"Codigo": "3", "Producto": "ESPARRAGOS", "Unidad": "un."},
+    {"Codigo": "25", "Producto": "ESQUINERO OLIMPICO", "Unidad": "un."},
+    {"Codigo": "2", "Producto": "ESQUINERO RECTO", "Unidad": "un."},
+    {"Codigo": "15", "Producto": "GALVA 14 X KILO", "Unidad": "kg"},
+    {"Codigo": "5", "Producto": "GALVA 18", "Unidad": "kg"},
+    {"Codigo": "31", "Producto": "GANCHOS ESTIRATEJIDOS 5/16", "Unidad": "un."},
+    {"Codigo": "15", "Producto": "OVALADO X MAYOR X 1000", "Unidad": "un."},
+    {"Codigo": "32", "Producto": "PALOMITAS", "Unidad": "un."},
+    {"Codigo": "24", "Producto": "PINCHES X METRO PINCHOSOS", "Unidad": "m"},
+    {"Codigo": "41", "Producto": "PLANCHUELA 1.00", "Unidad": "un."},
+    {"Codigo": "40", "Producto": "PLANCHUELA 1.20", "Unidad": "un."},
+    {"Codigo": "35", "Producto": "PLANCHUELA 1.50", "Unidad": "un."},
+    {"Codigo": "34", "Producto": "PLANCHUELA 2.00", "Unidad": "un."},
+    {"Codigo": "47", "Producto": "PORTON 3.00 X 1.80 BLACK", "Unidad": "un."},
+    {"Codigo": "9", "Producto": "PORTON DE CANO X 4.00", "Unidad": "un."},
+    {"Codigo": "10", "Producto": "PORTON INDUSTRIAL X 4.00", "Unidad": "un."},
+    {"Codigo": "51", "Producto": "PORTON LIVIANO 1.80 X 3.00 CANO", "Unidad": "un."},
+    {"Codigo": "53", "Producto": "PORTON LIVIANO 1.80X 3.00", "Unidad": "un."},
+    {"Codigo": "11", "Producto": "PORTON SIMPLE X 3.00", "Unidad": "un."},
+    {"Codigo": "54", "Producto": "POSTE DE MADERA", "Unidad": "un."},
+    {"Codigo": "27", "Producto": "POSTE OLIMPICO", "Unidad": "un."},
+    {"Codigo": "28", "Producto": "POSTE RECTO", "Unidad": "un."},
+    {"Codigo": "57", "Producto": "POSTE REDONDE ECO OBRA", "Unidad": "un."},
+    {"Codigo": "14", "Producto": "PUA X MAYOR X500", "Unidad": "un."},
+    {"Codigo": "43", "Producto": "PUA X METRO", "Unidad": "m"},
+    {"Codigo": "16", "Producto": "PUERTITA CLASICA 1.50", "Unidad": "un."},
+    {"Codigo": "12", "Producto": "PUERTITA CORAZON 1.5 X 1.00", "Unidad": "un."},
+    {"Codigo": "13", "Producto": "PUERTITA CRUZ REFORZADA 2.00 X 1.00", "Unidad": "un."},
+    {"Codigo": "7", "Producto": "PUERTITA LIVINA 1.00 X 1.80", "Unidad": "un."},
+    {"Codigo": "P", "Producto": "PUNTAL", "Unidad": "un."},
+    {"Codigo": "R16", "Producto": "RECOCIDO 16", "Unidad": "kg"},
+    {"Codigo": "REF", "Producto": "REFUERZO", "Unidad": "un."},
+    {"Codigo": "55", "Producto": "TEJIDO 1.50", "Unidad": "m"},
+    {"Codigo": "19", "Producto": "TEJIDO 2.00 X METRO", "Unidad": "m"},
+    {"Codigo": "59", "Producto": "TEJIDO DE OBRA 1.50", "Unidad": "m"},
+    {"Codigo": "63", "Producto": "TEJIDO DE OBRA 1.80", "Unidad": "m"},
+    {"Codigo": "50", "Producto": "TEJIDO DEL 12 - 2 PULGADAS", "Unidad": "m"},
+    {"Codigo": "18", "Producto": "TEJIDO RECU 1.8", "Unidad": "m"},
+    {"Codigo": "TR", "Producto": "TEJIDO ROMBITO 2 PULGADAS", "Unidad": "m"}
+]
+
 # --- FUNCIONES ---
 def ahora_arg():
     try: return datetime.now(pytz.timezone('America/Argentina/Buenos_Aires'))
@@ -60,7 +109,27 @@ def generar_excel(df):
     return output.getvalue()
 
 def cargar_datos_stock():
-    if not os.path.exists(STOCK_FILE): return pd.DataFrame(columns=["Codigo","Producto","Cantidad","Reservado","Unidad","Precio Costo","Precio Venta","Stock Minimo"])
+    # AUTO-REPARACIÓN: Si el archivo no existe O está vacío, lo llenamos con la lista de la foto
+    crear_nuevo = False
+    if not os.path.exists(STOCK_FILE):
+        crear_nuevo = True
+    else:
+        # Chequear si está vacío
+        try:
+            df_check = pd.read_csv(STOCK_FILE)
+            if df_check.empty or len(df_check) < 2: # Si tiene menos de 2 productos, asumimos error y recargamos
+                crear_nuevo = True
+        except:
+            crear_nuevo = True
+
+    if crear_nuevo:
+        df_init = pd.DataFrame(PRODUCTOS_INICIALES)
+        # Llenar columnas faltantes
+        for col in ["Cantidad", "Reservado", "Precio Costo", "Precio Venta", "Stock Minimo"]:
+            if col not in df_init.columns: df_init[col] = 0.0
+        df_init.to_csv(STOCK_FILE, index=False)
+    
+    # Carga Normal
     df = pd.read_csv(STOCK_FILE)
     df["Codigo"] = df["Codigo"].fillna("").astype(str)
     df["Producto"] = df["Producto"].fillna("").astype(str)
@@ -144,8 +213,9 @@ tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "💰 Stock 
 # 1. COTIZADOR
 with tab_cot:
     df_s = cargar_datos_stock()
+    # Si sigue vacío (caso extremo), mostrar aviso
     if df_s.empty:
-         st.info("⚠️ Base vacía. Cargá productos en STOCK.")
+         st.error("⚠️ La lista sigue vacía. Probá apretar 'Reiniciar Base de Datos' en el menú de la izquierda.")
     else:
         if "Reservado" not in df_s.columns: df_s["Reservado"] = 0.0
         df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
@@ -206,24 +276,22 @@ with tab_cot:
                     st.success("¡Venta Exitosa!")
                     st.rerun()
 
-# 2. STOCK (FINANCIERO)
+# 2. STOCK
 with tab_stock:
     df_s = cargar_datos_stock()
     if not df_s.empty:
         df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
-        # CÁLCULO DE GANANCIA VISUAL
         df_s["Ganancia Unitaria"] = df_s["Precio Venta"] - df_s["Precio Costo"]
 
     st.subheader("Tablero Financiero y Stock")
     
-    # SECCIÓN DE COMPRAS / INGRESO
     with st.expander("🛒 Registrar COMPRA o INGRESO de Mercadería", expanded=False):
-        st.info("Usá esto cuando comprás productos terminados (Alambre, Torniquetes) o fabricás.")
+        st.info("Usá esto cuando comprás productos terminados o ingresás fabricación.")
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         opc = df_s.apply(lambda x: f"[{x['Codigo']}] {x['Producto']}", axis=1)
         sel = c1.selectbox("Producto a Ingresar:", opc)
         num = c2.number_input("Cantidad:", min_value=1.0)
-        nuevo_costo = c3.number_input("¿Nuevo Costo? ($)", min_value=0.0, help="Si cambió el precio de compra, ponelo acá.")
+        nuevo_costo = c3.number_input("¿Nuevo Costo? ($)", min_value=0.0)
         
         if c4.button("📥 Ingresar Stock"):
             cod = sel.split("]")[0].replace("[", "")
@@ -231,14 +299,11 @@ with tab_stock:
             if idx:
                 i = idx[0]
                 df_s.at[i, "Cantidad"] += num
-                # Actualizar costo si el usuario puso algo mayor a 0
-                if nuevo_costo > 0:
-                    df_s.at[i, "Precio Costo"] = nuevo_costo
+                if nuevo_costo > 0: df_s.at[i, "Precio Costo"] = nuevo_costo
                 df_s.to_csv(STOCK_FILE, index=False)
-                st.success("Stock y Costos Actualizados!")
+                st.success("Stock Actualizado!")
                 st.rerun()
     
-    # SECCIÓN NUEVO PRODUCTO
     with st.expander("✨ Crear Nuevo Producto (Desde Cero)"):
         c_new1, c_new2, c_new3 = st.columns(3)
         n_cod = c_new1.text_input("Código")
@@ -259,11 +324,6 @@ with tab_stock:
                 df_s.to_csv(STOCK_FILE, index=False)
                 st.rerun()
 
-    # TABLA PRINCIPAL EDITABLE
-    # Ocultamos la columna calculada "Ganancia" del editor para que no intenten editarla, 
-    # pero la mostramos en el dataframe original si quisieran verla estática.
-    # Aquí usamos config para mostrar Costo y Venta.
-    
     st.write("---")
     c_dl, c_save = st.columns([1, 4])
     c_dl.download_button("📥 Bajar Excel", generar_excel(df_s), f"Stock_{date.today()}.xlsx")
@@ -282,7 +342,6 @@ with tab_stock:
         }
     )
     if c_save.button("💾 GUARDAR CAMBIOS MASIVOS", type="primary"):
-        # Al guardar, eliminamos la columna calculada 'Ganancia Unitaria' y 'DISPONIBLE' para no ensuciar el CSV
         cols_to_save = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
         df_final = df_edit[cols_to_save] 
         df_final.to_csv(STOCK_FILE, index=False)
@@ -292,7 +351,6 @@ with tab_stock:
 # 3. PRODUCCION
 with tab_prod:
     st.subheader("🏭 Control de Producción y Fraguado")
-    st.info("Si fabricás postes, dejá 28 días. Si fabricás tejido o comprás algo listo, poné 0 días.")
     
     df_prod = cargar_datos_general(PRODUCCION_FILE, ["Fecha_Inicio","Producto","Cantidad","Fecha_Lista","Estado"])
     df_stk = cargar_datos_stock()
@@ -303,13 +361,11 @@ with tab_prod:
         cant = c2.number_input("Cantidad Fabricada:", 1)
         c3, c4 = st.columns(2)
         fecha = c3.date_input("Fecha Elaboración:", value=ahora_arg().date())
-        dias = c4.number_input("Días Fraguado:", value=28, help="Poné 0 si ya está listo para vender.")
+        dias = c4.number_input("Días Fraguado:", value=28, help="Poné 0 si ya está listo.")
         
         if st.form_submit_button("Registrar Producción"):
             fin = fecha + timedelta(days=dias)
             estado = "En Proceso" if dias > 0 and (fin - ahora_arg().date()).days > 0 else "Listo"
-            
-            # Si son 0 días, ofrecer pase directo? Por ahora lo registramos como Listo para que den el OK manual
             nuevo = pd.DataFrame([{"Fecha_Inicio": fecha, "Producto": prod, "Cantidad": cant, "Fecha_Lista": fin, "Estado": estado}])
             pd.concat([df_prod, nuevo]).to_csv(PRODUCCION_FILE, index=False)
             st.rerun()
