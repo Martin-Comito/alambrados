@@ -5,79 +5,77 @@ import io
 from datetime import date, timedelta, datetime
 import pytz
 from fpdf import FPDF
-import math
 
-# --- 1. FORZAR TEMA CLARO DESDE EL ARRANQUE ---
-# Creamos el archivo de configuración si no existe para obligar a Streamlit a usar Light Mode
-config_dir = ".streamlit"
-config_path = os.path.join(config_dir, "config.toml")
-if not os.path.exists(config_path):
-    try:
-        os.makedirs(config_dir, exist_ok=True)
-        with open(config_path, "w") as f:
-            f.write("""
+# --- 1. CONFIGURACIÓN DE TEMA ROJO Y BLANCO ---
+# Esto fuerza a la aplicación a usar letras rojas y fondo blanco desde la configuración
+def configurar_tema_alambrados():
+    config_dir = ".streamlit"
+    config_path = os.path.join(config_dir, "config.toml")
+    
+    # Configuramos textColor (texto base) en un rojo oscuro legible (#8B0000)
+    # primaryColor (botones/selecciones) en rojo brillante (#D32F2F)
+    tema_corporativo = """
 [theme]
 base="light"
 primaryColor="#D32F2F"
 backgroundColor="#FFFFFF"
-secondaryBackgroundColor="#F0F2F6"
-textColor="#000000"
+secondaryBackgroundColor="#FFEBEE"
+textColor="#8B0000" 
 font="sans serif"
-""")
-    except: pass
+"""
+    if not os.path.exists(config_path):
+        try:
+            os.makedirs(config_dir, exist_ok=True)
+            with open(config_path, "w") as f:
+                f.write(tema_corporativo)
+        except: pass
+
+configurar_tema_alambrados()
 
 # --- 2. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Gestión Alambrados del Carmen", layout="wide", page_icon="🏗️")
 
-# --- 3. CSS "AGRESIVO" PARA GARANTIZAR BLANCO ---
-# Esto sobreescribe cualquier intento del navegador de poner modo oscuro
+# --- 3. CSS PARA CORREGIR TABLAS Y COLORES ---
 st.markdown("""
     <style>
-        /* Forzar fondo blanco absoluto */
+        /* Forzar fondo blanco y letras rojas/oscuras */
         .stApp {
             background-color: white !important;
-            color: black !important;
+            color: #8B0000 !important;
         }
-        /* Forzar textos a negro */
-        p, h1, h2, h3, h4, h5, h6, span, div, label {
-            color: black !important;
+        
+        /* Títulos bien rojos */
+        h1, h2, h3, h4 {
+            color: #D32F2F !important;
         }
-        /* Títulos en Rojo Institucional */
-        h1, h2, h3 {
-            color: #B71C1C !important;
-        }
-        /* Tablas: Fondo blanco y texto negro */
-        .stDataFrame, .stDataEditor {
-            background-color: white !important;
-            color: black !important;
-        }
+
+        /* CORRECCIÓN DE TABLAS (Edición tipo Excel) */
+        /* Asegura que el texto dentro de la tabla sea negro/oscuro para leer bien */
         [data-testid="stDataFrame"] div, [data-testid="stDataEditor"] div {
-            color: black !important;
+            color: #333333 !important; 
             background-color: white !important;
         }
-        /* Sidebar: Gris muy clarito */
+        /* Encabezados de tabla en rojo */
+        [data-testid="stDataFrame"] thead th, [data-testid="stDataEditor"] thead th {
+            color: #D32F2F !important;
+        }
+
+        /* Barra lateral con toque rojo suave */
         [data-testid="stSidebar"] {
-            background-color: #F5F5F5 !important;
-            border-right: 1px solid #ddd;
+            background-color: #FFEBEE !important; /* Rojo muy pálido */
+            border-right: 1px solid #ffcdd2;
         }
-        [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
-            color: #333 !important;
-        }
-        /* Logo con borde rojo */
-        [data-testid="stSidebar"] img {
-            margin-top: 20px;
-            border-radius: 5px;
-            border: 2px solid #D32F2F;
-        }
-        /* Botones rojos */
+        
+        /* Botones rojos sólidos */
         .stButton button {
             background-color: #D32F2F !important;
             color: white !important;
-            border: none;
+            border-radius: 5px;
+            font-weight: bold;
         }
-        /* Métricas */
-        [data-testid="stMetricValue"] {
-            color: #D32F2F !important;
+        .stButton button:hover {
+            background-color: #B71C1C !important;
+            color: white !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -89,55 +87,55 @@ VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
 LOGO_FILE = "alambrados.jpeg"
 
-# --- LISTA EXACTA RECUPERADA DE TU EXCEL ---
+# --- LISTA EXACTA DEL EXCEL SUBIDO ---
 PRODUCTOS_INICIALES = [
-    {'Codigo': '97', 'Producto': 'ADICIONAL PINCHES 20.000', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '6', 'Producto': 'BOYERITO IMPORTADO X 1000', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '3', 'Producto': 'CONCERTINA DOBLE CRUZADA X 45', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '2', 'Producto': 'CONCERTINA SIMPLE', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '11', 'Producto': 'DECO 1.50', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '0', 'Producto': 'DECO 1.80', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '33', 'Producto': 'ESPARRAGOS', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '25', 'Producto': 'ESQUINERO OLIMPICO', 'Unidad': 'un.', 'Precio Costo': 18000, 'Precio Venta': 39000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '2', 'Producto': 'ESQUINERO RECTO', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 32000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '15', 'Producto': 'GALVA 14 X KILO', 'Unidad': 'kg', 'Precio Costo': 0, 'Precio Venta': 6800, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '5', 'Producto': 'GALVA 18', 'Unidad': 'kg', 'Precio Costo': 0, 'Precio Venta': 11900, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '31', 'Producto': 'GANCHOS ESTIRATEJIDOS 5/16', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 2100, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '15', 'Producto': 'OVALADO X MAYOR X 1000', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 290000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '32', 'Producto': 'PALOMITAS', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 2100, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '24', 'Producto': 'PINCHES X METRO PINCHOSOS', 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '41', 'Producto': 'PLANCHUELA 1.00', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 4800, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '40', 'Producto': 'PLANCHUELA 1.20', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 5100, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '35', 'Producto': 'PLANCHUELA 1.50', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 5800, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '34', 'Producto': 'PLANCHUELA 2.00', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 7999, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '47', 'Producto': 'PORTON 3.00 X 1.80 BLACK', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 360000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '9', 'Producto': 'PORTON DE CANO X 4.00', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 3600000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '10', 'Producto': 'PORTON INDUSTRIAL X 4.00', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 499999, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '51', 'Producto': 'PORTON LIVIANO 1.80 X 3.00 CANO', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 260000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '53', 'Producto': 'PORTON LIVIANO 1.80X 3.00', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '11', 'Producto': 'PORTON SIMPLE X 3.00', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '54', 'Producto': 'POSTE DE MADERA', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 15000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '27', 'Producto': 'POSTE OLIMPICO', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 17999, 'Stock Minimo': 0, 'Cantidad': 10, 'Reservado': 0},
-    {'Codigo': '28', 'Producto': 'POSTE RECTO', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 16999, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '57', 'Producto': 'POSTE REDONDE ECO OBRA', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 15000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '14', 'Producto': 'PUA X MAYOR X500', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '43', 'Producto': 'PUA X METRO', 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 550, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '16', 'Producto': 'PUERTITA CLASICA 1.50', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 1589000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '12', 'Producto': 'PUERTITA CORAZON 1.5 X 1.00', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 162800, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '13', 'Producto': 'PUERTITA CRUZ REFORZADA 2.00 X 1.00', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 199800, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '7', 'Producto': 'PUERTITA LIVINA 1.00 X 1.80', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 125300, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '26', 'Producto': 'PUNTAL', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 13900, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': 'R16', 'Producto': 'RECOCIDO 16', 'Unidad': 'kg', 'Precio Costo': 0, 'Precio Venta': 4900, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': 'REF', 'Producto': 'REFUERZO', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 39000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '55', 'Producto': 'TEJIDO 1.50', 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 59000, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '19', 'Producto': 'TEJIDO 2.00 X METRO', 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 74999, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '59', 'Producto': 'TEJIDO DE OBRA 1.50', 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '63', 'Producto': 'TEJIDO DE OBRA 1.80', 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '50', 'Producto': 'TEJIDO DEL 12 - 2 PULGADAS', 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '18', 'Producto': 'TEJIDO RECU 1.8', 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '39', 'Producto': 'TEJIDO ROMBITO 2 PULGADAS', 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 69999, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '29', 'Producto': 'Torniquete', 'Unidad': 'un.', 'Precio Costo': 1999, 'Precio Venta': 3500, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0},
-    {'Codigo': '1', 'Producto': 'liso', 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 360, 'Stock Minimo': 0, 'Cantidad': 0, 'Reservado': 0}
+    {'Codigo': '97', 'Producto': 'ADICIONAL PINCHES 20.000', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '6', 'Producto': 'BOYERITO IMPORTADO X 1000', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '3', 'Producto': 'CONCERTINA DOBLE CRUZADA X 45', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '2', 'Producto': 'CONCERTINA SIMPLE', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '11', 'Producto': 'DECO 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '0', 'Producto': 'DECO 1.80', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '33', 'Producto': 'ESPARRAGOS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '25', 'Producto': 'ESQUINERO OLIMPICO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 18000, 'Precio Venta': 39000, 'Stock Minimo': 0},
+    {'Codigo': '2', 'Producto': 'ESQUINERO RECTO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 32000, 'Stock Minimo': 0},
+    {'Codigo': '15', 'Producto': 'GALVA 14 X KILO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'kg', 'Precio Costo': 0, 'Precio Venta': 6800, 'Stock Minimo': 0},
+    {'Codigo': '5', 'Producto': 'GALVA 18', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'kg', 'Precio Costo': 0, 'Precio Venta': 11900, 'Stock Minimo': 0},
+    {'Codigo': '31', 'Producto': 'GANCHOS ESTIRATEJIDOS 5/16', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 2100, 'Stock Minimo': 0},
+    {'Codigo': '15', 'Producto': 'OVALADO X MAYOR X 1000', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 290000, 'Stock Minimo': 0},
+    {'Codigo': '32', 'Producto': 'PALOMITAS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 2100, 'Stock Minimo': 0},
+    {'Codigo': '24', 'Producto': 'PINCHES X METRO PINCHOSOS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '41', 'Producto': 'PLANCHUELA 1.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 4800, 'Stock Minimo': 0},
+    {'Codigo': '40', 'Producto': 'PLANCHUELA 1.20', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 5100, 'Stock Minimo': 0},
+    {'Codigo': '35', 'Producto': 'PLANCHUELA 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 5800, 'Stock Minimo': 0},
+    {'Codigo': '34', 'Producto': 'PLANCHUELA 2.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 7999, 'Stock Minimo': 0},
+    {'Codigo': '47', 'Producto': 'PORTON 3.00 X 1.80 BLACK', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 360000, 'Stock Minimo': 0},
+    {'Codigo': '9', 'Producto': 'PORTON DE CANO X 4.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 3600000, 'Stock Minimo': 0},
+    {'Codigo': '10', 'Producto': 'PORTON INDUSTRIAL X 4.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 499999, 'Stock Minimo': 0},
+    {'Codigo': '51', 'Producto': 'PORTON LIVIANO 1.80 X 3.00 CANO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 260000, 'Stock Minimo': 0},
+    {'Codigo': '53', 'Producto': 'PORTON LIVIANO 1.80X 3.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '11', 'Producto': 'PORTON SIMPLE X 3.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '54', 'Producto': 'POSTE DE MADERA', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 15000, 'Stock Minimo': 0},
+    {'Codigo': '27', 'Producto': 'POSTE OLIMPICO', 'Cantidad': 10, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 17999, 'Stock Minimo': 0},
+    {'Codigo': '28', 'Producto': 'POSTE RECTO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 16999, 'Stock Minimo': 0},
+    {'Codigo': '57', 'Producto': 'POSTE REDONDE ECO OBRA', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 15000, 'Stock Minimo': 0},
+    {'Codigo': '14', 'Producto': 'PUA X MAYOR X500', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '43', 'Producto': 'PUA X METRO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 550, 'Stock Minimo': 0},
+    {'Codigo': '16', 'Producto': 'PUERTITA CLASICA 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 1589000, 'Stock Minimo': 0},
+    {'Codigo': '12', 'Producto': 'PUERTITA CORAZON 1.5 X 1.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 162800, 'Stock Minimo': 0},
+    {'Codigo': '13', 'Producto': 'PUERTITA CRUZ REFORZADA 2.00 X 1.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 199800, 'Stock Minimo': 0},
+    {'Codigo': '7', 'Producto': 'PUERTITA LIVINA 1.00 X 1.80', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 125300, 'Stock Minimo': 0},
+    {'Codigo': '26', 'Producto': 'PUNTAL', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 13900, 'Stock Minimo': 0},
+    {'Codigo': 'R16', 'Producto': 'RECOCIDO 16', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'kg', 'Precio Costo': 0, 'Precio Venta': 4900, 'Stock Minimo': 0},
+    {'Codigo': 'REF', 'Producto': 'REFUERZO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 39000, 'Stock Minimo': 0},
+    {'Codigo': '55', 'Producto': 'TEJIDO 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 59000, 'Stock Minimo': 0},
+    {'Codigo': '19', 'Producto': 'TEJIDO 2.00 X METRO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 74999, 'Stock Minimo': 0},
+    {'Codigo': '59', 'Producto': 'TEJIDO DE OBRA 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '63', 'Producto': 'TEJIDO DE OBRA 1.80', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '50', 'Producto': 'TEJIDO DEL 12 - 2 PULGADAS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '18', 'Producto': 'TEJIDO RECU 1.8', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '39', 'Producto': 'TEJIDO ROMBITO 2 PULGADAS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 69999, 'Stock Minimo': 0},
+    {'Codigo': '29', 'Producto': 'Torniquete', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 1999, 'Precio Venta': 3500, 'Stock Minimo': 0},
+    {'Codigo': '1', 'Producto': 'liso', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 360, 'Stock Minimo': 0}
 ]
 
 # --- FUNCIONES ---
@@ -152,14 +150,13 @@ def generar_excel(df):
     return output.getvalue()
 
 def cargar_datos_stock():
-    # Carga Robusta: Si no existe, lo crea con la lista de productos
+    # Inicialización robusta con la lista del Excel
     if not os.path.exists(STOCK_FILE):
         df_init = pd.DataFrame(PRODUCTOS_INICIALES)
         df_init.to_csv(STOCK_FILE, index=False)
     
     try:
         df = pd.read_csv(STOCK_FILE)
-        # Si está vacío (por error anterior), lo forzamos a recargar
         if df.empty or len(df) < 5:
             df = pd.DataFrame(PRODUCTOS_INICIALES)
             df.to_csv(STOCK_FILE, index=False)
@@ -167,7 +164,6 @@ def cargar_datos_stock():
         df = pd.DataFrame(PRODUCTOS_INICIALES)
         df.to_csv(STOCK_FILE, index=False)
 
-    # Asegurar tipos
     df["Codigo"] = df["Codigo"].fillna("").astype(str)
     df["Producto"] = df["Producto"].fillna("").astype(str)
     df["Unidad"] = df["Unidad"].fillna("un.").astype(str)
@@ -240,7 +236,7 @@ with st.sidebar:
     with st.expander("⚙️ Admin"):
         if st.button("♻️ Restaurar Base de Datos"):
              if os.path.exists(STOCK_FILE): os.remove(STOCK_FILE)
-             st.success("¡Base restaurada con TU stock!")
+             st.success("¡Datos del Excel restaurados! Recargá la página.")
              st.rerun()
 
 # --- INTERFAZ ---
@@ -251,7 +247,7 @@ tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "💰 Stock 
 with tab_cot:
     df_s = cargar_datos_stock()
     if df_s.empty:
-         st.error("⚠️ La lista está vacía. Por favor, apretá 'Restaurar Base de Datos' en el menú lateral.")
+         st.error("⚠️ Error cargando stock. Usá el botón Restaurar.")
     else:
         if "Reservado" not in df_s.columns: df_s["Reservado"] = 0.0
         df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
@@ -280,6 +276,7 @@ with tab_cot:
             st.subheader("Carrito")
             if st.session_state.carrito:
                 st.markdown("---")
+                # Encabezados manuales
                 k1, k2, k3, k4 = st.columns([4, 2, 2, 1])
                 k1.markdown("**Producto**")
                 k2.markdown("**Cant**")
@@ -327,9 +324,9 @@ with tab_cot:
                     st.success("¡Venta Exitosa!")
                     st.rerun()
             else:
-                st.info("El carrito está vacío.")
+                st.info("Carrito vacío.")
 
-# 2. STOCK
+# 2. STOCK (TABLA EDITABLE TIPO EXCEL)
 with tab_stock:
     df_s = cargar_datos_stock()
     if not df_s.empty:
@@ -337,67 +334,43 @@ with tab_stock:
         df_s["Ganancia Unitaria"] = df_s["Precio Venta"] - df_s["Precio Costo"]
 
     st.subheader("Tablero Financiero y Stock")
+    st.info("💡 Editá directamente en la tabla como si fuera un Excel. Al terminar, apretá 'GUARDAR CAMBIOS'.")
     
-    with st.expander("🛒 Registrar COMPRA o INGRESO de Mercadería", expanded=False):
-        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-        opc = df_s.apply(lambda x: f"[{x['Codigo']}] {x['Producto']}", axis=1)
-        sel = c1.selectbox("Producto a Ingresar:", opc)
-        num = c2.number_input("Cantidad:", min_value=1.0)
-        nuevo_costo = c3.number_input("¿Nuevo Costo? ($)", min_value=0.0)
-        
-        if c4.button("📥 Ingresar Stock"):
-            cod = sel.split("]")[0].replace("[", "")
-            idx = df_s.index[df_s["Codigo"] == cod].tolist()
-            if idx:
-                i = idx[0]
-                df_s.at[i, "Cantidad"] += num
-                if nuevo_costo > 0: df_s.at[i, "Precio Costo"] = nuevo_costo
-                df_s.to_csv(STOCK_FILE, index=False)
-                st.success("Stock Actualizado!")
-                st.rerun()
-    
-    with st.expander("✨ Crear Nuevo Producto (Desde Cero)"):
-        c_new1, c_new2, c_new3 = st.columns(3)
-        n_cod = c_new1.text_input("Código")
-        n_nom = c_new2.text_input("Nombre")
-        n_uni = c_new3.selectbox("Unidad", ["un.", "m", "kg", "pack"])
-        c_cost, c_price = st.columns(2)
-        n_costo = c_cost.number_input("Costo de Compra ($)", min_value=0.0)
-        n_venta = c_price.number_input("Precio de Venta ($)", min_value=0.0)
-        
-        if st.button("Crear Producto"):
-            if n_cod and n_nom:
-                nuevo = pd.DataFrame([{
-                    "Codigo": n_cod, "Producto": n_nom, "Unidad": n_uni,
-                    "Cantidad": 0.0, "Reservado": 0.0, 
-                    "Precio Costo": n_costo, "Precio Venta": n_venta, "Stock Minimo": 0.0
-                }])
-                df_s = pd.concat([df_s, nuevo], ignore_index=True)
-                df_s.to_csv(STOCK_FILE, index=False)
-                st.rerun()
-
-    st.write("---")
     c_dl, c_save = st.columns([1, 4])
     c_dl.download_button("📥 Bajar Excel", generar_excel(df_s), f"Stock_{date.today()}.xlsx")
     
+    # TABLA EDITABLE PRINCIPAL (CONFIGURACIÓN EXCEL)
     df_edit = st.data_editor(
-        df_s, key="editor_stock", num_rows="dynamic", use_container_width=True, hide_index=True,
+        df_s, 
+        key="editor_stock", 
+        num_rows="dynamic", # Permite agregar filas abajo
+        use_container_width=True, 
+        hide_index=True,
         column_order=["Codigo", "Producto", "DISPONIBLE", "Cantidad", "Reservado", "Precio Costo", "Precio Venta", "Ganancia Unitaria"],
         column_config={
             "Codigo": st.column_config.TextColumn("Cód"),
+            # DISPONIBLE y GANANCIA son cálculos, mejor no editarlos para evitar confusiones
             "DISPONIBLE": st.column_config.NumberColumn("✅ Disp.", disabled=True, format="%.0f"),
+            "Ganancia Unitaria": st.column_config.NumberColumn("Ganancia ($)", disabled=True, format="$ %d"),
+            # ESTOS SÍ SE PUEDEN EDITAR:
+            "Producto": st.column_config.TextColumn("Producto", required=True),
             "Cantidad": st.column_config.NumberColumn("Físico", format="%.0f"),
             "Reservado": st.column_config.NumberColumn("Reservado", format="%.0f"),
             "Precio Costo": st.column_config.NumberColumn("Costo ($)", format="$ %d"),
             "Precio Venta": st.column_config.NumberColumn("Venta ($)", format="$ %d"),
-            "Ganancia Unitaria": st.column_config.NumberColumn("Ganancia ($)", disabled=True, format="$ %d"),
         }
     )
+    
     if c_save.button("💾 GUARDAR CAMBIOS MASIVOS", type="primary"):
+        # Guardamos solo las columnas reales, descartamos las calculadas
         cols_to_save = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
+        # Nos aseguramos que las columnas existan en la edición
+        for col in cols_to_save:
+            if col not in df_edit.columns:
+                df_edit[col] = 0
         df_final = df_edit[cols_to_save] 
         df_final.to_csv(STOCK_FILE, index=False)
-        st.success("Guardado correctamente.")
+        st.success("¡Base de Datos Actualizada!")
         st.rerun()
 
 # 3. PRODUCCION
