@@ -6,7 +6,7 @@ from datetime import date, timedelta, datetime
 import pytz
 from fpdf import FPDF
 
-# --- AUTO-CONFIGURACIÓN DE TEMA ---
+# AUTO-CONFIGURACIÓN DE TEMA
 def configurar_tema_alambrados():
     config_dir = ".streamlit"
     config_path = os.path.join(config_dir, "config.toml")
@@ -32,7 +32,7 @@ if configurar_tema_alambrados():
     st.warning("🎨 Tema instalado. Reiniciá la app para ver los cambios.")
     st.stop()
 
-# --- ESTILOS CSS ---
+# ESTILOS CSS
 st.markdown("""
     <style>
         [data-testid="stSidebar"] img { margin-top: 20px; border-radius: 5px; border: 2px solid #D32F2F; }
@@ -45,14 +45,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- RUTAS Y ARCHIVOS ---
+# RUTAS Y ARCHIVOS 
 STOCK_FILE = "stock_del_carmen.csv"
 GASTOS_FILE = "gastos_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
 LOGO_FILE = "alambrados.jpeg"
 
-# --- LISTA COMPLETA ---
+# LISTA COMPLETA
 PRODUCTOS_INICIALES = [
     {"Codigo": "3", "Producto": "ADICIONAL PINCHES 20.000", "Unidad": "un."},
     {"Codigo": "6", "Producto": "BOYERITO IMPORTADO X 1000", "Unidad": "un."},
@@ -101,7 +101,7 @@ PRODUCTOS_INICIALES = [
     {"Codigo": "TR", "Producto": "TEJIDO ROMBITO 2 PULGADAS", "Unidad": "m"}
 ]
 
-# --- FUNCIONES ---
+# FUNCIONES
 def ahora_arg():
     try: return datetime.now(pytz.timezone('America/Argentina/Buenos_Aires'))
     except: return datetime.now()
@@ -141,7 +141,7 @@ def cargar_datos_general(archivo, cols):
     if not os.path.exists(archivo): return pd.DataFrame(columns=cols)
     return pd.read_csv(archivo)
 
-# --- PDF ---
+# PDF
 class PDF(FPDF):
     def header(self):
         if os.path.exists(LOGO_FILE):
@@ -192,7 +192,7 @@ def generar_pdf(cliente, items, total, tipo_venta):
 
 if 'carrito' not in st.session_state: st.session_state.carrito = []
 
-# --- BARRA LATERAL ---
+# BARRA LATERAL
 with st.sidebar:
     if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, use_container_width=True)
     else: st.title("AC")
@@ -205,7 +205,7 @@ with st.sidebar:
              st.success("Reiniciando...")
              st.rerun()
 
-# --- INTERFAZ ---
+# INTERFAZ
 st.title("Gestión Comercial")
 tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "💰 Stock y Costos", "🏭 Producción", "📊 Historial"])
 
@@ -241,7 +241,7 @@ with tab_cot:
         with col_der:
             st.subheader("Carrito")
             if st.session_state.carrito:
-                # --- NUEVA VISUALIZACIÓN DEL CARRITO (ITEM POR ITEM) ---
+                # VISUALIZACIÓN DEL CARRITO (ITEM POR ITEM)
                 st.markdown("---")
                 # Cabecera
                 k1, k2, k3, k4 = st.columns([4, 2, 2, 1])
@@ -419,3 +419,4 @@ with tab_prod:
 with tab_hist:
     st.subheader("Registro de Ventas")
     st.dataframe(cargar_datos_general(VENTAS_FILE, []), use_container_width=True)
+
