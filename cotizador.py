@@ -38,6 +38,10 @@ st.markdown("""
         [data-testid="stSidebar"] img { margin-top: 20px; border-radius: 5px; border: 2px solid #D32F2F; }
         h1, h2, h3 { color: #B71C1C !important; }
         [data-testid="stMetricValue"] { color: #D32F2F; }
+        /* Estilo para los botones de borrar chiquitos */
+        div[data-testid="column"] button {
+            padding: 0px 10px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -48,7 +52,7 @@ VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
 LOGO_FILE = "alambrados.jpeg"
 
-# --- LISTA COMPLETA DE LA FOTO (CON LOS FALTANTES) ---
+# --- LISTA COMPLETA ---
 PRODUCTOS_INICIALES = [
     {"Codigo": "3", "Producto": "ADICIONAL PINCHES 20.000", "Unidad": "un."},
     {"Codigo": "6", "Producto": "BOYERITO IMPORTADO X 1000", "Unidad": "un."},
@@ -109,27 +113,22 @@ def generar_excel(df):
     return output.getvalue()
 
 def cargar_datos_stock():
-    # AUTO-REPARACIÓN: Si el archivo no existe O está vacío, lo llenamos con la lista de la foto
     crear_nuevo = False
     if not os.path.exists(STOCK_FILE):
         crear_nuevo = True
     else:
-        # Chequear si está vacío
         try:
             df_check = pd.read_csv(STOCK_FILE)
-            if df_check.empty or len(df_check) < 2: # Si tiene menos de 2 productos, asumimos error y recargamos
+            if df_check.empty or len(df_check) < 2:
                 crear_nuevo = True
-        except:
-            crear_nuevo = True
+        except: crear_nuevo = True
 
     if crear_nuevo:
         df_init = pd.DataFrame(PRODUCTOS_INICIALES)
-        # Llenar columnas faltantes
         for col in ["Cantidad", "Reservado", "Precio Costo", "Precio Venta", "Stock Minimo"]:
             if col not in df_init.columns: df_init[col] = 0.0
         df_init.to_csv(STOCK_FILE, index=False)
     
-    # Carga Normal
     df = pd.read_csv(STOCK_FILE)
     df["Codigo"] = df["Codigo"].fillna("").astype(str)
     df["Producto"] = df["Producto"].fillna("").astype(str)
@@ -213,9 +212,8 @@ tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "💰 Stock 
 # 1. COTIZADOR
 with tab_cot:
     df_s = cargar_datos_stock()
-    # Si sigue vacío (caso extremo), mostrar aviso
     if df_s.empty:
-         st.error("⚠️ La lista sigue vacía. Probá apretar 'Reiniciar Base de Datos' en el menú de la izquierda.")
+         st.error("⚠️ Base vacía.")
     else:
         if "Reservado" not in df_s.columns: df_s["Reservado"] = 0.0
         df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
@@ -243,15 +241,38 @@ with tab_cot:
         with col_der:
             st.subheader("Carrito")
             if st.session_state.carrito:
-                df_c = pd.DataFrame(st.session_state.carrito)
-                st.dataframe(df_c[["Producto", "Cantidad", "Subtotal"]], hide_index=True, use_container_width=True)
-                total = df_c["Subtotal"].sum()
-                st.divider()
+                # --- NUEVA VISUALIZACIÓN DEL CARRITO (ITEM POR ITEM) ---
+                st.markdown("---")
+                # Cabecera
+                k1, k2, k3, k4 = st.columns([4, 2, 2, 1])
+                k1.markdown("**Producto**")
+                k2.markdown("**Cant**")
+                k3.markdown("**Subtotal**")
+                
+                # Filas
+                for i, item in enumerate(st.session_state.carrito):
+                    c1, c2, c3, c4 = st.columns([4, 2, 2, 1])
+                    c1.write(item["Producto"])
+                    c2.write(f"{item['Cantidad']:.1f}")
+                    c3.write(f"${item['Subtotal']:.0f}")
+                    
+                    # Botón de borrar individual
+                    if c4.button("❌", key=f"del_{i}"):
+                        st.session_state.carrito.pop(i)
+                        st.rerun()
+                
+                st.markdown("---")
+                
+                # Calculo Total
+                total = sum(item['Subtotal'] for item in st.session_state.carrito)
+                
                 c_tot, c_trash = st.columns([3,1])
                 c_tot.metric("TOTAL", f"${total:,.0f}")
-                if c_trash.button("🗑️"):
+                
+                if c_trash.button("🗑️ Vaciar Todo"):
                     st.session_state.carrito = []
                     st.rerun()
+                
                 st.divider()
                 tipo = st.radio("Destino:", ["Entrega Inmediata", "Dejar en Acopio"], horizontal=True)
                 c_pdf, c_ok = st.columns(2)
@@ -275,6 +296,8 @@ with tab_cot:
                     st.session_state.carrito = []
                     st.success("¡Venta Exitosa!")
                     st.rerun()
+            else:
+                st.info("El carrito está vacío.")
 
 # 2. STOCK
 with tab_stock:
@@ -286,7 +309,6 @@ with tab_stock:
     st.subheader("Tablero Financiero y Stock")
     
     with st.expander("🛒 Registrar COMPRA o INGRESO de Mercadería", expanded=False):
-        st.info("Usá esto cuando comprás productos terminados o ingresás fabricación.")
         c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         opc = df_s.apply(lambda x: f"[{x['Codigo']}] {x['Producto']}", axis=1)
         sel = c1.selectbox("Producto a Ingresar:", opc)
