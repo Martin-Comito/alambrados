@@ -6,7 +6,7 @@ from datetime import date, timedelta, datetime
 import pytz
 from fpdf import FPDF
 
-# --- AUTO-CONFIGURACIÓN DE TEMA ---
+# AUTO-CONFIGURACIÓN DE TEMA 
 def configurar_tema_alambrados():
     config_dir = ".streamlit"
     config_path = os.path.join(config_dir, "config.toml")
@@ -32,15 +32,13 @@ if configurar_tema_alambrados():
     st.warning("🎨 Tema instalado. Reiniciá la app para ver los cambios.")
     st.stop()
 
-# --- ESTILOS CSS ---
+# ESTILOS CSS 
 st.markdown("""
     <style>
-        /* Ajustes Generales */
         [data-testid="stSidebar"] img { margin-top: 20px; border-radius: 5px; border: 2px solid #D32F2F; }
         h1, h2, h3 { color: #B71C1C !important; }
         [data-testid="stMetricValue"] { color: #D32F2F; }
-        
-        /* Botones pequeños para eliminar en el carrito */
+        /* Ajuste para botones de eliminar pequeños */
         div[data-testid="column"] button {
             padding: 0px 10px;
             font-size: 12px;
@@ -49,14 +47,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- RUTAS Y ARCHIVOS ---
+# RUTAS Y ARCHIVOS
 STOCK_FILE = "stock_del_carmen.csv"
 GASTOS_FILE = "gastos_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
 LOGO_FILE = "alambrados.jpeg"
 
-# --- LISTA COMPLETA DE PRODUCTOS (BACKUP) ---
+# LISTA COMPLETA DE LA FOTO
 PRODUCTOS_INICIALES = [
     {"Codigo": "3", "Producto": "ADICIONAL PINCHES 20.000", "Unidad": "un."},
     {"Codigo": "6", "Producto": "BOYERITO IMPORTADO X 1000", "Unidad": "un."},
@@ -105,7 +103,7 @@ PRODUCTOS_INICIALES = [
     {"Codigo": "TR", "Producto": "TEJIDO ROMBITO 2 PULGADAS", "Unidad": "m"}
 ]
 
-# --- FUNCIONES ---
+# FUNCIONES
 def ahora_arg():
     try: return datetime.now(pytz.timezone('America/Argentina/Buenos_Aires'))
     except: return datetime.now()
@@ -169,9 +167,13 @@ def generar_pdf(cliente, items, total, tipo_venta):
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     fecha_hora = ahora_arg().strftime("%d/%m/%Y %H:%M")
+    
+    # DATOS CLIENTE (SIN TIPO DE ENTREGA)
     pdf.cell(200, 10, txt=f"Cliente: {cliente}", ln=True)
-    pdf.cell(200, 10, txt=f"Fecha: {fecha_hora} ({tipo_venta})", ln=True)
+    pdf.cell(200, 10, txt=f"Fecha: {fecha_hora}", ln=True) # Se quitó tipo_venta de acá
     pdf.ln(10)
+    
+    # TABLA
     pdf.set_fill_color(211, 47, 47) 
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Arial", 'B', 10)
@@ -190,17 +192,26 @@ def generar_pdf(cliente, items, total, tipo_venta):
         pdf.cell(30, 10, f"${item['Subtotal']:.0f}", 1)
         pdf.ln()
     pdf.ln(5)
+    
+    # TOTAL
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(160, 10, "TOTAL FINAL", 0)
     pdf.set_text_color(183, 28, 28)
     pdf.cell(30, 10, f"${total:,.0f}", 0, 1)
+    
+    # DISCLAIMER LEGAL (NUEVO)
+    pdf.ln(20)
+    pdf.set_font("Arial", 'I', 9)
+    pdf.set_text_color(80, 80, 80)
+    pdf.multi_cell(0, 5, "Presupuesto sujeto a disponibilidad de stock al momento de la compra. Los precios pueden sufrir modificaciones sin previo aviso hasta la confirmación del pago.")
+    
     return pdf.output(dest='S').encode('latin-1')
 
 # Inicialización de Sesión
 if 'carrito' not in st.session_state: st.session_state.carrito = []
-if 'input_key' not in st.session_state: st.session_state.input_key = 0 # Para resetear la tabla
+if 'input_key' not in st.session_state: st.session_state.input_key = 0 
 
-# --- BARRA LATERAL ---
+# BARRA LATERAL
 with st.sidebar:
     if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, use_container_width=True)
     else: st.title("AC")
@@ -213,7 +224,7 @@ with st.sidebar:
              st.success("Reiniciando...")
              st.rerun()
 
-# --- INTERFAZ PRINCIPAL ---
+# INTERFAZ PRINCIPAL
 st.title("Gestión Comercial")
 tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "💰 Stock y Costos", "🏭 Producción", "📊 Historial"])
 
@@ -228,7 +239,7 @@ with tab_cot:
 
         col_izq, col_der = st.columns([1, 1])
         
-        # --- COLUMNA IZQUIERDA: MÉTODOS DE CARGA ---
+        # COLUMNA IZQUIERDA: MÉTODOS DE CARGA 
         with col_izq:
             st.subheader("1. Carga de Productos")
             cliente = st.text_input("Nombre del Cliente", placeholder="Ej: Juan Perez")
@@ -240,14 +251,13 @@ with tab_cot:
             if modo_carga == "⚡ Carga Rápida (Por Código)":
                 st.info("Escribí los códigos y cantidades en la tabla. Agrega filas si necesitás.")
                 
-                # Preparamos una tabla vacía para cargar
-                df_input_template = pd.DataFrame([{"Codigo": "", "Cantidad": 1.0}] * 6) # 6 filas vacías iniciales
+                # AHORA SON 12 FILAS VACÍAS
+                df_input_template = pd.DataFrame([{"Codigo": "", "Cantidad": 1.0}] * 12) 
                 
-                # Editor de datos para carga masiva
                 edited_input = st.data_editor(
                     df_input_template, 
                     num_rows="dynamic", 
-                    key=f"grid_input_{st.session_state.input_key}", # Key dinámica para poder resetear
+                    key=f"grid_input_{st.session_state.input_key}", 
                     column_config={
                         "Codigo": st.column_config.TextColumn("Código", help="Ej: 27, 55, P"),
                         "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=0.1, step=1.0)
@@ -256,7 +266,6 @@ with tab_cot:
                 )
                 
                 if st.button("🔄 Procesar Lista y Agregar", type="primary"):
-                    # Procesamos la tabla
                     items_agregados = 0
                     items_no_encontrados = []
                     
@@ -264,8 +273,7 @@ with tab_cot:
                         cod_ingresado = str(row["Codigo"]).strip()
                         cant_ingresada = float(row["Cantidad"])
                         
-                        if cod_ingresado: # Si escribieron algo en el código
-                            # Buscamos en el stock exacto
+                        if cod_ingresado: 
                             filtro = df_s[df_s["Codigo"] == cod_ingresado]
                             
                             if not filtro.empty:
@@ -283,7 +291,6 @@ with tab_cot:
                     
                     if items_agregados > 0:
                         st.success(f"✅ Se agregaron {items_agregados} productos al carrito.")
-                        # Incrementamos key para limpiar la tabla
                         st.session_state.input_key += 1 
                         st.rerun()
                     
@@ -307,12 +314,12 @@ with tab_cot:
                     })
                     st.rerun()
 
-        # --- COLUMNA DERECHA: CARRITO Y FINALIZACIÓN ---
+        # COLUMNA DERECHA: CARRITO Y FINALIZACIÓN 
         with col_der:
             st.subheader("2. Detalle del Pedido")
             if st.session_state.carrito:
                 st.markdown("---")
-                # Visualización del Carrito con Borrado Individual
+                # Visualización del Carrito
                 k1, k2, k3, k4 = st.columns([4, 2, 2, 1])
                 k1.markdown("**Producto**")
                 k2.markdown("**Cant.**")
@@ -324,7 +331,6 @@ with tab_cot:
                     c2.write(f"{item['Cantidad']:.1f}")
                     c3.write(f"${item['Subtotal']:,.0f}")
                     
-                    # Botón rojo chiquito para eliminar esa fila
                     if c4.button("❌", key=f"del_cart_{i}"):
                         st.session_state.carrito.pop(i)
                         st.rerun()
@@ -341,6 +347,7 @@ with tab_cot:
                 
                 st.divider()
                 st.write("**Opciones de Cierre:**")
+                # Esto sigue en pantalla para el control de stock, pero NO sale en el PDF
                 tipo = st.radio("Destino:", ["Entrega Inmediata", "Dejar en Acopio"], horizontal=True, label_visibility="collapsed")
                 
                 c_pdf, c_ok = st.columns(2)
@@ -348,7 +355,6 @@ with tab_cot:
                 c_pdf.download_button("📄 Bajar Presupuesto", pdf_bytes, f"P_{cliente}.pdf", "application/pdf", use_container_width=True)
                 
                 if c_ok.button("✅ CONFIRMAR VENTA", type="primary", use_container_width=True):
-                    # Descontar Stock
                     for item in st.session_state.carrito:
                         idx = df_s.index[df_s["Codigo"] == item["Codigo"]].tolist()
                         if idx:
@@ -357,7 +363,6 @@ with tab_cot:
                             else: df_s.at[i, "Cantidad"] -= item["Cantidad"]
                     df_s.to_csv(STOCK_FILE, index=False)
                     
-                    # Guardar Historial
                     nuevo = pd.DataFrame([{
                         "Fecha": ahora_arg().strftime("%d/%m/%Y %H:%M"), 
                         "Cliente": cliente, "Total": total, "Tipo": tipo,
