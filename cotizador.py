@@ -35,10 +35,12 @@ if configurar_tema_alambrados():
 # --- ESTILOS CSS ---
 st.markdown("""
     <style>
+        /* Ajustes Generales */
         [data-testid="stSidebar"] img { margin-top: 20px; border-radius: 5px; border: 2px solid #D32F2F; }
         h1, h2, h3 { color: #B71C1C !important; }
         [data-testid="stMetricValue"] { color: #D32F2F; }
-        /* Ajuste para botones de eliminar pequeños */
+        
+        /* Botones pequeños para eliminar en el carrito */
         div[data-testid="column"] button {
             padding: 0px 10px;
             font-size: 12px;
@@ -54,7 +56,7 @@ VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
 LOGO_FILE = "alambrados.jpeg"
 
-# --- LISTA COMPLETA DE LA FOTO ---
+# --- LISTA COMPLETA DE PRODUCTOS (BACKUP) ---
 PRODUCTOS_INICIALES = [
     {"Codigo": "3", "Producto": "ADICIONAL PINCHES 20.000", "Unidad": "un."},
     {"Codigo": "6", "Producto": "BOYERITO IMPORTADO X 1000", "Unidad": "un."},
@@ -115,7 +117,7 @@ def generar_excel(df):
     return output.getvalue()
 
 def cargar_datos_stock():
-    # AUTO-REPARACIÓN
+    # Carga Robusta con Auto-Reparación
     crear_nuevo = False
     if not os.path.exists(STOCK_FILE):
         crear_nuevo = True
@@ -194,7 +196,9 @@ def generar_pdf(cliente, items, total, tipo_venta):
     pdf.cell(30, 10, f"${total:,.0f}", 0, 1)
     return pdf.output(dest='S').encode('latin-1')
 
+# Inicialización de Sesión
 if 'carrito' not in st.session_state: st.session_state.carrito = []
+if 'input_key' not in st.session_state: st.session_state.input_key = 0 # Para resetear la tabla
 
 # --- BARRA LATERAL ---
 with st.sidebar:
@@ -209,80 +213,142 @@ with st.sidebar:
              st.success("Reiniciando...")
              st.rerun()
 
-# --- INTERFAZ ---
+# --- INTERFAZ PRINCIPAL ---
 st.title("Gestión Comercial")
 tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "💰 Stock y Costos", "🏭 Producción", "📊 Historial"])
 
-# 1. COTIZADOR
+# 1. COTIZADOR CON CARGA RÁPIDA
 with tab_cot:
     df_s = cargar_datos_stock()
     if df_s.empty:
-         st.info("⚠️ Base vacía. Cargá productos en STOCK.")
+         st.error("⚠️ Base vacía.")
     else:
         if "Reservado" not in df_s.columns: df_s["Reservado"] = 0.0
         df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
 
         col_izq, col_der = st.columns([1, 1])
+        
+        # --- COLUMNA IZQUIERDA: MÉTODOS DE CARGA ---
         with col_izq:
-            st.subheader("Datos del Pedido")
-            cliente = st.text_input("Nombre Cliente")
-            st.write("")
-            opciones = df_s.apply(lambda x: f"[{x['Codigo']}] {x['Producto']} (Disp: {x['DISPONIBLE']:.0f})", axis=1)
-            sel_prod = st.selectbox("Buscar Producto:", ["Seleccionar..."] + list(opciones))
-            c_cant, c_add = st.columns([1, 2])
-            cant = c_cant.number_input("Cantidad", min_value=1.0, value=1.0)
+            st.subheader("1. Carga de Productos")
+            cliente = st.text_input("Nombre del Cliente", placeholder="Ej: Juan Perez")
+            st.write("---")
             
-            if c_add.button("➕ AGREGAR", use_container_width=True) and sel_prod != "Seleccionar...":
-                cod = sel_prod.split("]")[0].replace("[", "")
-                fila = df_s[df_s["Codigo"] == cod].iloc[0]
-                st.session_state.carrito.append({
-                    "Codigo": fila["Codigo"], "Producto": fila["Producto"],
-                    "Cantidad": cant, "Precio": fila["Precio Venta"],
-                    "Subtotal": cant * fila["Precio Venta"]
-                })
-                st.rerun()
+            # Selector de Modo de Carga
+            modo_carga = st.radio("Método de Carga:", ["⚡ Carga Rápida (Por Código)", "🔍 Buscador (Por Nombre)"], horizontal=True)
+            
+            if modo_carga == "⚡ Carga Rápida (Por Código)":
+                st.info("Escribí los códigos y cantidades en la tabla. Agrega filas si necesitás.")
+                
+                # Preparamos una tabla vacía para cargar
+                df_input_template = pd.DataFrame([{"Codigo": "", "Cantidad": 1.0}] * 6) # 6 filas vacías iniciales
+                
+                # Editor de datos para carga masiva
+                edited_input = st.data_editor(
+                    df_input_template, 
+                    num_rows="dynamic", 
+                    key=f"grid_input_{st.session_state.input_key}", # Key dinámica para poder resetear
+                    column_config={
+                        "Codigo": st.column_config.TextColumn("Código", help="Ej: 27, 55, P"),
+                        "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=0.1, step=1.0)
+                    },
+                    hide_index=True
+                )
+                
+                if st.button("🔄 Procesar Lista y Agregar", type="primary"):
+                    # Procesamos la tabla
+                    items_agregados = 0
+                    items_no_encontrados = []
+                    
+                    for index, row in edited_input.iterrows():
+                        cod_ingresado = str(row["Codigo"]).strip()
+                        cant_ingresada = float(row["Cantidad"])
+                        
+                        if cod_ingresado: # Si escribieron algo en el código
+                            # Buscamos en el stock exacto
+                            filtro = df_s[df_s["Codigo"] == cod_ingresado]
+                            
+                            if not filtro.empty:
+                                fila = filtro.iloc[0]
+                                st.session_state.carrito.append({
+                                    "Codigo": fila["Codigo"], 
+                                    "Producto": fila["Producto"],
+                                    "Cantidad": cant_ingresada, 
+                                    "Precio": fila["Precio Venta"],
+                                    "Subtotal": cant_ingresada * fila["Precio Venta"]
+                                })
+                                items_agregados += 1
+                            else:
+                                items_no_encontrados.append(cod_ingresado)
+                    
+                    if items_agregados > 0:
+                        st.success(f"✅ Se agregaron {items_agregados} productos al carrito.")
+                        # Incrementamos key para limpiar la tabla
+                        st.session_state.input_key += 1 
+                        st.rerun()
+                    
+                    if items_no_encontrados:
+                        st.error(f"❌ Códigos no encontrados: {', '.join(items_no_encontrados)}")
 
+            else:
+                # MODO BUSCADOR CLÁSICO
+                opciones = df_s.apply(lambda x: f"[{x['Codigo']}] {x['Producto']} (Disp: {x['DISPONIBLE']:.0f})", axis=1)
+                sel_prod = st.selectbox("Buscar Producto:", ["Seleccionar..."] + list(opciones))
+                c_cant, c_add = st.columns([1, 2])
+                cant = c_cant.number_input("Cantidad", min_value=1.0, value=1.0)
+                
+                if c_add.button("➕ AGREGAR", use_container_width=True) and sel_prod != "Seleccionar...":
+                    cod = sel_prod.split("]")[0].replace("[", "")
+                    fila = df_s[df_s["Codigo"] == cod].iloc[0]
+                    st.session_state.carrito.append({
+                        "Codigo": fila["Codigo"], "Producto": fila["Producto"],
+                        "Cantidad": cant, "Precio": fila["Precio Venta"],
+                        "Subtotal": cant * fila["Precio Venta"]
+                    })
+                    st.rerun()
+
+        # --- COLUMNA DERECHA: CARRITO Y FINALIZACIÓN ---
         with col_der:
-            st.subheader("Carrito")
+            st.subheader("2. Detalle del Pedido")
             if st.session_state.carrito:
-                # --- VISUALIZACIÓN DEL CARRITO CON ELIMINACIÓN INDIVIDUAL ---
+                st.markdown("---")
+                # Visualización del Carrito con Borrado Individual
+                k1, k2, k3, k4 = st.columns([4, 2, 2, 1])
+                k1.markdown("**Producto**")
+                k2.markdown("**Cant.**")
+                k3.markdown("**Total**")
                 
-                # Encabezados
-                h1, h2, h3, h4 = st.columns([3, 1, 2, 1])
-                h1.markdown("**Producto**")
-                h2.markdown("**Cant.**")
-                h3.markdown("**Total**")
-                
-                # Filas del carrito
                 for i, item in enumerate(st.session_state.carrito):
-                    c1, c2, c3, c4 = st.columns([3, 1, 2, 1])
+                    c1, c2, c3, c4 = st.columns([4, 2, 2, 1])
                     c1.write(item["Producto"])
-                    c2.write(f"{item['Cantidad']:.0f}")
+                    c2.write(f"{item['Cantidad']:.1f}")
                     c3.write(f"${item['Subtotal']:,.0f}")
                     
-                    # Botón de eliminar por ítem
-                    if c4.button("❌", key=f"btn_del_{i}"):
+                    # Botón rojo chiquito para eliminar esa fila
+                    if c4.button("❌", key=f"del_cart_{i}"):
                         st.session_state.carrito.pop(i)
                         st.rerun()
                 
-                st.divider()
-                
-                # Calcular Total
+                st.markdown("---")
                 total = sum(item['Subtotal'] for item in st.session_state.carrito)
                 
                 c_tot, c_trash = st.columns([3,1])
                 c_tot.metric("TOTAL", f"${total:,.0f}")
                 
-                if c_trash.button("🗑️ Vaciar Todo"):
+                if c_trash.button("🗑️ Vaciar"):
                     st.session_state.carrito = []
                     st.rerun()
                 
                 st.divider()
-                tipo = st.radio("Destino:", ["Entrega Inmediata", "Dejar en Acopio"], horizontal=True)
+                st.write("**Opciones de Cierre:**")
+                tipo = st.radio("Destino:", ["Entrega Inmediata", "Dejar en Acopio"], horizontal=True, label_visibility="collapsed")
+                
                 c_pdf, c_ok = st.columns(2)
                 pdf_bytes = generar_pdf(cliente, st.session_state.carrito, total, tipo)
-                c_pdf.download_button("📄 Presupuesto", pdf_bytes, f"P_{cliente}.pdf", "application/pdf", use_container_width=True)
-                if c_ok.button("✅ VENDER", type="primary", use_container_width=True):
+                c_pdf.download_button("📄 Bajar Presupuesto", pdf_bytes, f"P_{cliente}.pdf", "application/pdf", use_container_width=True)
+                
+                if c_ok.button("✅ CONFIRMAR VENTA", type="primary", use_container_width=True):
+                    # Descontar Stock
                     for item in st.session_state.carrito:
                         idx = df_s.index[df_s["Codigo"] == item["Codigo"]].tolist()
                         if idx:
@@ -290,6 +356,8 @@ with tab_cot:
                             if "Acopio" in tipo: df_s.at[i, "Reservado"] += item["Cantidad"]
                             else: df_s.at[i, "Cantidad"] -= item["Cantidad"]
                     df_s.to_csv(STOCK_FILE, index=False)
+                    
+                    # Guardar Historial
                     nuevo = pd.DataFrame([{
                         "Fecha": ahora_arg().strftime("%d/%m/%Y %H:%M"), 
                         "Cliente": cliente, "Total": total, "Tipo": tipo,
@@ -297,11 +365,13 @@ with tab_cot:
                     }])
                     hist = cargar_datos_general(VENTAS_FILE, ["Fecha","Cliente","Total","Tipo","Detalle"])
                     pd.concat([hist, nuevo]).to_csv(VENTAS_FILE, index=False)
+                    
                     st.session_state.carrito = []
                     st.success("¡Venta Exitosa!")
+                    st.balloons()
                     st.rerun()
             else:
-                st.info("El carrito está vacío. Agregá productos desde la izquierda.")
+                st.info("El carrito está vacío.")
 
 # 2. STOCK
 with tab_stock:
