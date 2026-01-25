@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import io
 import ast 
+import re 
 from datetime import date, timedelta, datetime
 import pytz
 from fpdf import FPDF
@@ -105,7 +106,7 @@ PRODUCTOS_INICIALES = [
     {'Codigo': '1', 'Producto': 'liso', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 360, 'Stock Minimo': 0}
 ]
 
-# FUNCIONES 
+# FUNCIONES
 def ahora_arg():
     try: return datetime.now(pytz.timezone('America/Argentina/Buenos_Aires'))
     except: return datetime.now()
@@ -148,7 +149,7 @@ def cargar_datos_general(archivo, cols):
     if not os.path.exists(archivo): return pd.DataFrame(columns=cols)
     return pd.read_csv(archivo)
 
-# PDF
+# PDF GENERATOR 
 class PDF(FPDF):
     def header(self):
         if os.path.exists(LOGO_FILE):
@@ -168,53 +169,60 @@ class PDF(FPDF):
 def generar_pdf(cliente, items, total, tipo_venta=""):
     pdf = PDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
+    pdf.set_font("Arial", size=11)
     fecha_hora = ahora_arg().strftime("%d/%m/%Y %H:%M")
     
     pdf.cell(200, 10, txt=f"Cliente: {cliente}", ln=True)
     pdf.cell(200, 10, txt=f"Fecha Emision: {fecha_hora}", ln=True)
     pdf.ln(10)
     
+    # Encabezados
     pdf.set_fill_color(211, 47, 47) 
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Arial", 'B', 10)
-    pdf.cell(20, 10, "Cod", 1, 0, 'C', True)
-    pdf.cell(90, 10, "Producto", 1, 0, 'C', True)
-    pdf.cell(20, 10, "Cant", 1, 0, 'C', True)
-    pdf.cell(30, 10, "Unit", 1, 0, 'C', True)
-    pdf.cell(30, 10, "Total", 1, 1, 'C', True)
+    pdf.set_font("Arial", 'B', 9) 
+    pdf.cell(15, 10, "Cod", 1, 0, 'C', True)
+    pdf.cell(100, 10, "Producto", 1, 0, 'C', True)
+    pdf.cell(15, 10, "Cant", 1, 0, 'C', True)
+    pdf.cell(25, 10, "Unit", 1, 0, 'C', True)
+    pdf.cell(25, 10, "Total", 1, 1, 'C', True)
+    
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", size=10)
+    pdf.set_font("Arial", size=9)
     
     for item in items:
-        # Lógica de compatibilidad para historial viejo
+        # Lógica Robusta de Impresión
         if isinstance(item, dict):
-            # Formato NUEVO (Diccionario)
-            cod = str(item.get('Codigo', ''))
+            cod = str(item.get('Codigo', '-'))[:6]
             prod = str(item.get('Producto', ''))
+            # Recorte de texto largo para que no se encime
+            if len(prod) > 55: prod = prod[:52] + "..."
+            
             cant = item.get('Cantidad', 0)
             prec = item.get('Precio', 0)
             sub = item.get('Subtotal', 0)
         else:
-            # Formato VIEJO (String simple)
+            # Fallback para ventas muy viejas (string simple)
             cod = "-"
-            prod = str(item)
+            prod = str(item)[:55]
             cant = 0
             prec = 0
             sub = 0
         
-        pdf.cell(20, 10, cod, 1)
-        pdf.cell(90, 10, prod, 1)
-        pdf.cell(20, 10, f"{cant:.1f}", 1)
-        pdf.cell(30, 10, f"${prec:.0f}", 1)
-        pdf.cell(30, 10, f"${sub:.0f}", 1)
+        try: prod_clean = prod.encode('latin-1', 'replace').decode('latin-1')
+        except: prod_clean = prod
+
+        pdf.cell(15, 8, cod, 1)
+        pdf.cell(100, 8, prod_clean, 1)
+        pdf.cell(15, 8, f"{cant:.1f}", 1)
+        pdf.cell(25, 8, f"${prec:.0f}", 1)
+        pdf.cell(25, 8, f"${sub:.0f}", 1)
         pdf.ln()
         
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(160, 10, "TOTAL FINAL", 0)
+    pdf.cell(155, 10, "TOTAL FINAL", 0)
     pdf.set_text_color(183, 28, 28)
-    pdf.cell(30, 10, f"${total:,.0f}", 0, 1)
+    pdf.cell(25, 10, f"${total:,.0f}", 0, 1)
     
     pdf.ln(20)
     pdf.set_font("Arial", 'I', 8)
@@ -229,7 +237,7 @@ if 'input_key' not in st.session_state: st.session_state.input_key = 0
 
 # BARRA LATERAL
 with st.sidebar:
-    if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, use_container_width=True)
+    if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, width=200)
     else: st.title("AC")
     st.write("---")
     st.caption(f"📅 {ahora_arg().strftime('%d/%m/%Y %H:%M')}")
@@ -272,7 +280,8 @@ with tab_cot:
                         "Codigo": st.column_config.TextColumn("Código"),
                         "Cantidad": st.column_config.NumberColumn("Cantidad", min_value=0.1, step=1.0)
                     },
-                    hide_index=True
+                    hide_index=True,
+                    use_container_width=True
                 )
                 
                 if st.button("🔄 Procesar Lista", type="primary"):
@@ -356,7 +365,18 @@ with tab_cot:
                             else: df_s.at[i, "Cantidad"] -= item["Cantidad"]
                     df_s.to_csv(STOCK_FILE, index=False)
                     
-                    detalle_completo = str(st.session_state.carrito)
+                    # GUARDADO LIMPIO (SIN NUMPY) PARA EVITAR ERROR EN HISTORIAL
+                    carrito_limpio = []
+                    for item in st.session_state.carrito:
+                        item_clean = item.copy()
+                        # Convierte a float nativo de Python (JSON compatible)
+                        item_clean['Cantidad'] = float(item['Cantidad'])
+                        item_clean['Precio'] = float(item['Precio'])
+                        item_clean['Subtotal'] = float(item['Subtotal'])
+                        carrito_limpio.append(item_clean)
+                        
+                    detalle_completo = str(carrito_limpio)
+                    
                     nuevo = pd.DataFrame([{
                         "Fecha": ahora_arg().strftime("%d/%m/%Y %H:%M"), 
                         "Cliente": cliente, "Total": total, "Tipo": tipo,
@@ -515,44 +535,24 @@ with tab_hist:
         if venta_seleccionada:
             idx_sel = opciones_venta[opciones_venta == venta_seleccionada].index[0]
             fila_venta = df_v.loc[idx_sel]
-            
-            # BLOQUE INTELIGENTE DE RECUPERACIÓN 
             try:
                 raw_detalle = fila_venta["Detalle"]
-                # 1. Intentar convertir el texto en lista
-                try:
-                    parsed_data = ast.literal_eval(raw_detalle)
-                except:
-                    # Si falla, asumir que es texto plano viejo
-                    parsed_data = [raw_detalle]
+                # 🛠️ LIMPIEZA DE DATOS SUCIOS (Numpy Fix)
+                # Borra "np.float64(" y ")" para que ast.literal_eval no falle
+                raw_detalle = re.sub(r"np\.float64\((.*?)\)", r"\1", raw_detalle)
+                
+                try: parsed_data = ast.literal_eval(raw_detalle)
+                except: parsed_data = [raw_detalle]
 
-                # 2. Normalizar a formato lista de diccionarios
                 items_normalizados = []
                 if isinstance(parsed_data, list):
                     for item in parsed_data:
-                        if isinstance(item, dict):
-                            items_normalizados.append(item)
-                        else:
-                            # Convertir string viejo a dict nuevo dummy
-                            items_normalizados.append({
-                                'Producto': str(item),
-                                'Codigo': '-',
-                                'Cantidad': 0,
-                                'Precio': 0,
-                                'Subtotal': 0
-                            })
+                        if isinstance(item, dict): items_normalizados.append(item)
+                        else: items_normalizados.append({'Producto': str(item), 'Codigo': '-', 'Cantidad': 0, 'Precio': 0, 'Subtotal': 0})
                 
-                # 3. Generar PDF
                 pdf_reimpresion = generar_pdf(fila_venta["Cliente"], items_normalizados, fila_venta["Total"])
-                
-                st.download_button(
-                    label="📄 Descargar PDF (Para Imprimir)",
-                    data=pdf_reimpresion,
-                    file_name=f"Copia_{fila_venta['Cliente']}.pdf",
-                    mime="application/pdf"
-                )
-            except Exception as e:
-                st.error(f"Error recuperando venta: {e}")
+                st.download_button(label="📄 Descargar PDF (Para Imprimir)", data=pdf_reimpresion, file_name=f"Copia_{fila_venta['Cliente']}.pdf", mime="application/pdf")
+            except Exception as e: st.error(f"Error recuperando venta: {e}")
 
         st.divider()
         st.write("📊 **Historial Completo**")
