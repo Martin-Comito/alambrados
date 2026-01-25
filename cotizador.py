@@ -7,7 +7,7 @@ from datetime import date, timedelta, datetime
 import pytz
 from fpdf import FPDF
 
-# --- AUTO-CONFIGURACIÓN DE TEMA ---
+# AUTO-CONFIGURACIÓN DE TEMA
 def configurar_tema_alambrados():
     config_dir = ".streamlit"
     config_path = os.path.join(config_dir, "config.toml")
@@ -33,7 +33,7 @@ if configurar_tema_alambrados():
     st.warning("🎨 Tema instalado. Reiniciá la app para ver los cambios.")
     st.stop()
 
-# --- ESTILOS CSS ---
+# ESTILOS CSS
 st.markdown("""
     <style>
         [data-testid="stSidebar"] img { margin-top: 20px; border-radius: 5px; border: 2px solid #D32F2F; }
@@ -47,14 +47,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- RUTAS Y ARCHIVOS ---
+# RUTAS Y ARCHIVOS
 STOCK_FILE = "stock_del_carmen.csv"
 GASTOS_FILE = "gastos_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
 LOGO_FILE = "alambrados.jpeg"
 
-# --- LISTA BASE (SOLO SE USA SI NO EXISTE EL ARCHIVO) ---
+# LISTA COMPLETA
 PRODUCTOS_INICIALES = [
     {'Codigo': '97', 'Producto': 'ADICIONAL PINCHES 20.000', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
     {'Codigo': '6', 'Producto': 'BOYERITO IMPORTADO X 1000', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
@@ -105,7 +105,7 @@ PRODUCTOS_INICIALES = [
     {'Codigo': '1', 'Producto': 'liso', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 360, 'Stock Minimo': 0}
 ]
 
-# --- FUNCIONES ---
+# FUNCIONES
 def ahora_arg():
     try: return datetime.now(pytz.timezone('America/Argentina/Buenos_Aires'))
     except: return datetime.now()
@@ -117,48 +117,42 @@ def generar_excel(df):
     return output.getvalue()
 
 def cargar_datos_stock():
-    # --- LOGICA DE PERSISTENCIA SAGRADA ---
-    
-    # 1. Si NO existe el archivo, se crea de cero con la lista base
+    # 1. Si no existe, crea base con lista original
     if not os.path.exists(STOCK_FILE):
         df_init = pd.DataFrame(PRODUCTOS_INICIALES)
         df_init.to_csv(STOCK_FILE, index=False)
         return df_init
     
-    # 2. Si existe, SE RESPETA. Solo se repara si faltan columnas.
+    # 2. Si existe, LEE y RESPETA lo que hay
     try:
         df = pd.read_csv(STOCK_FILE)
     except Exception as e:
-        st.error(f"Error crítico leyendo base de datos: {e}")
-        return pd.DataFrame() # Devolver vacío para no romper, pero avisar
+        st.error(f"Error base de datos: {e}")
+        return pd.DataFrame() 
 
-    # 3. Mantenimiento Quirúrgico: Agregar columnas faltantes SIN borrar filas
+    # 3. Solo agregar columnas si faltan (no borra filas)
     cols_necesarias = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
-    cambio_estructura = False
-    
+    cambio = False
     for col in cols_necesarias:
         if col not in df.columns:
-            df[col] = 0.0 # Se agrega la columna en 0, pero se mantienen las otras
-            cambio_estructura = True
+            df[col] = 0.0
+            cambio = True
     
-    # 4. Limpieza de tipos (Para que no falle el visualizador)
+    # 4. Limpieza
     df["Codigo"] = df["Codigo"].fillna("").astype(str)
     df["Producto"] = df["Producto"].fillna("").astype(str)
     df["Unidad"] = df["Unidad"].fillna("un.").astype(str)
     for col in ["Cantidad", "Reservado", "Precio Costo", "Precio Venta", "Stock Minimo"]:
         if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
     
-    # Solo si hubo cambios de estructura (columnas nuevas), guardamos el ajuste
-    if cambio_estructura:
-        df.to_csv(STOCK_FILE, index=False)
-        
+    if cambio: df.to_csv(STOCK_FILE, index=False)
     return df
 
 def cargar_datos_general(archivo, cols):
     if not os.path.exists(archivo): return pd.DataFrame(columns=cols)
     return pd.read_csv(archivo)
 
-# --- PDF ---
+# PDF
 class PDF(FPDF):
     def header(self):
         if os.path.exists(LOGO_FILE):
@@ -182,7 +176,7 @@ def generar_pdf(cliente, items, total, tipo_venta=""):
     fecha_hora = ahora_arg().strftime("%d/%m/%Y %H:%M")
     
     pdf.cell(200, 10, txt=f"Cliente: {cliente}", ln=True)
-    pdf.cell(200, 10, txt=f"Fecha: {fecha_hora}", ln=True)
+    pdf.cell(200, 10, txt=f"Fecha Emision: {fecha_hora}", ln=True)
     pdf.ln(10)
     
     pdf.set_fill_color(211, 47, 47) 
@@ -209,7 +203,6 @@ def generar_pdf(cliente, items, total, tipo_venta=""):
         pdf.cell(30, 10, f"${prec:.0f}", 1)
         pdf.cell(30, 10, f"${sub:.0f}", 1)
         pdf.ln()
-        
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(160, 10, "TOTAL FINAL", 0)
@@ -227,7 +220,7 @@ def generar_pdf(cliente, items, total, tipo_venta=""):
 if 'carrito' not in st.session_state: st.session_state.carrito = []
 if 'input_key' not in st.session_state: st.session_state.input_key = 0
 
-# --- BARRA LATERAL ---
+# BARRA LATERAL
 with st.sidebar:
     if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, use_container_width=True)
     else: st.title("AC")
@@ -240,14 +233,14 @@ with st.sidebar:
              st.success("Reiniciando...")
              st.rerun()
 
-# --- INTERFAZ PRINCIPAL ---
+# INTERFAZ PRINCIPAL
 st.title("Gestión Comercial")
 tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "💰 Stock y Costos", "🏭 Producción", "📊 Historial"])
 
 # 1. COTIZADOR
 with tab_cot:
     df_s = cargar_datos_stock()
-    if df_s.empty: st.error("⚠️ Base de datos no encontrada.")
+    if df_s.empty: st.error("⚠️ Base vacía.")
     else:
         if "Reservado" not in df_s.columns: df_s["Reservado"] = 0.0
         df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
@@ -345,7 +338,7 @@ with tab_cot:
                 
                 c_pdf, c_ok = st.columns(2)
                 pdf_bytes = generar_pdf(cliente, st.session_state.carrito, total, tipo)
-                c_pdf.download_button("📄 Presupuesto", pdf_bytes, f"P_{cliente}.pdf", "application/pdf", use_container_width=True)
+                c_pdf.download_button("📄 Descargar PDF (Para Imprimir)", pdf_bytes, f"P_{cliente}.pdf", "application/pdf", use_container_width=True)
                 
                 if c_ok.button("✅ CONFIRMAR VENTA", type="primary", use_container_width=True):
                     for item in st.session_state.carrito:
@@ -432,10 +425,8 @@ with tab_stock:
     )
     if c_save.button("💾 GUARDAR CAMBIOS MASIVOS", type="primary"):
         cols_to_save = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
-        # Nos aseguramos que las columnas existan
         for col in cols_to_save:
             if col not in df_edit.columns: df_edit[col] = 0
-        
         df_final = df_edit[cols_to_save] 
         df_final.to_csv(STOCK_FILE, index=False)
         st.success("Guardado.")
@@ -444,9 +435,33 @@ with tab_stock:
 # 3. PRODUCCION
 with tab_prod:
     st.subheader("🏭 Producción")
+    
+    # CREAR PRODUCTO DESDE PRODUCCIÓN (Pedido por el cliente)
+    with st.expander("✨ Crear Nuevo Producto (Si no existe)", expanded=False):
+        c_prod_new1, c_prod_new2, c_prod_new3 = st.columns(3)
+        np_cod = c_prod_new1.text_input("Código", key="np_cod")
+        np_nom = c_prod_new2.text_input("Nombre", key="np_nom")
+        np_uni = c_prod_new3.selectbox("Unidad", ["un.", "m", "kg", "pack"], key="np_uni")
+        
+        if st.button("Crear y Usar", key="btn_crear_prod"):
+            if np_cod and np_nom:
+                # Carga stock actual
+                df_current = cargar_datos_stock()
+                nuevo_p = pd.DataFrame([{
+                    "Codigo": np_cod, "Producto": np_nom, "Unidad": np_uni,
+                    "Cantidad": 0.0, "Reservado": 0.0, 
+                    "Precio Costo": 0.0, "Precio Venta": 0.0, "Stock Minimo": 0.0
+                }])
+                # Guarda
+                df_current = pd.concat([df_current, nuevo_p], ignore_index=True)
+                df_current.to_csv(STOCK_FILE, index=False)
+                st.success(f"Creado: {np_nom}")
+                st.rerun()
+
     df_prod = cargar_datos_general(PRODUCCION_FILE, ["Fecha_Inicio","Producto","Cantidad","Fecha_Lista","Estado"])
     df_stk = cargar_datos_stock()
     
+    st.write("---")
     with st.form("new_prod"):
         c1, c2 = st.columns(2)
         prod = c1.selectbox("Producto:", df_stk["Producto"].unique() if not df_stk.empty else [])
@@ -489,8 +504,8 @@ with tab_hist:
     
     if not df_v.empty:
         df_v = df_v.sort_index(ascending=False)
-        st.write("🖨️ **Reimprimir Comprobante**")
-        opciones_venta = df_v.apply(lambda x: f"{x['Fecha']} | {x['Cliente']} | Total: ${x['Total']:,.0f}", axis=1)
+        st.write("🖨️ **Reimprimir Comprobante (Copia)**")
+        opciones_venta = df_v.apply(lambda x: f"{x['Fecha']} | {x['Cliente']} | ${x['Total']:,.0f}", axis=1)
         venta_seleccionada = st.selectbox("Seleccionar Venta:", opciones_venta)
         
         if venta_seleccionada:
@@ -500,16 +515,16 @@ with tab_hist:
                 items_recuperados = ast.literal_eval(fila_venta["Detalle"])
                 pdf_reimpresion = generar_pdf(fila_venta["Cliente"], items_recuperados, fila_venta["Total"])
                 st.download_button(
-                    label="📄 Descargar PDF de esta venta",
+                    label="📄 Descargar PDF (Para Imprimir)",
                     data=pdf_reimpresion,
-                    file_name=f"Reimpresion_{fila_venta['Cliente']}.pdf",
+                    file_name=f"Copia_{fila_venta['Cliente']}.pdf",
                     mime="application/pdf"
                 )
             except:
-                st.error("No se pudo reconstruir el detalle de esta venta.")
+                st.error("No se pudo reconstruir el detalle.")
 
         st.divider()
-        st.write("📊 **Tabla de Datos**")
+        st.write("📊 **Historial Completo**")
         st.dataframe(df_v, use_container_width=True)
     else:
         st.info("No hay ventas registradas aún.")
