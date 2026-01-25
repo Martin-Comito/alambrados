@@ -105,7 +105,7 @@ PRODUCTOS_INICIALES = [
     {'Codigo': '1', 'Producto': 'liso', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 360, 'Stock Minimo': 0}
 ]
 
-# FUNCIONES
+# FUNCIONES 
 def ahora_arg():
     try: return datetime.now(pytz.timezone('America/Argentina/Buenos_Aires'))
     except: return datetime.now()
@@ -117,20 +117,17 @@ def generar_excel(df):
     return output.getvalue()
 
 def cargar_datos_stock():
-    # 1. Si no existe, crea base con lista original
     if not os.path.exists(STOCK_FILE):
         df_init = pd.DataFrame(PRODUCTOS_INICIALES)
         df_init.to_csv(STOCK_FILE, index=False)
         return df_init
     
-    # 2. Si existe, LEE y RESPETA lo que hay
     try:
         df = pd.read_csv(STOCK_FILE)
     except Exception as e:
         st.error(f"Error base de datos: {e}")
         return pd.DataFrame() 
 
-    # 3. Solo agregar columnas si faltan (no borra filas)
     cols_necesarias = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
     cambio = False
     for col in cols_necesarias:
@@ -138,7 +135,6 @@ def cargar_datos_stock():
             df[col] = 0.0
             cambio = True
     
-    # 4. Limpieza
     df["Codigo"] = df["Codigo"].fillna("").astype(str)
     df["Producto"] = df["Producto"].fillna("").astype(str)
     df["Unidad"] = df["Unidad"].fillna("un.").astype(str)
@@ -191,11 +187,21 @@ def generar_pdf(cliente, items, total, tipo_venta=""):
     pdf.set_font("Arial", size=10)
     
     for item in items:
-        cod = str(item.get('Codigo', ''))
-        prod = str(item.get('Producto', ''))
-        cant = item.get('Cantidad', 0)
-        prec = item.get('Precio', 0)
-        sub = item.get('Subtotal', 0)
+        # Lógica de compatibilidad para historial viejo
+        if isinstance(item, dict):
+            # Formato NUEVO (Diccionario)
+            cod = str(item.get('Codigo', ''))
+            prod = str(item.get('Producto', ''))
+            cant = item.get('Cantidad', 0)
+            prec = item.get('Precio', 0)
+            sub = item.get('Subtotal', 0)
+        else:
+            # Formato VIEJO (String simple)
+            cod = "-"
+            prod = str(item)
+            cant = 0
+            prec = 0
+            sub = 0
         
         pdf.cell(20, 10, cod, 1)
         pdf.cell(90, 10, prod, 1)
@@ -203,6 +209,7 @@ def generar_pdf(cliente, items, total, tipo_venta=""):
         pdf.cell(30, 10, f"${prec:.0f}", 1)
         pdf.cell(30, 10, f"${sub:.0f}", 1)
         pdf.ln()
+        
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(160, 10, "TOTAL FINAL", 0)
@@ -436,7 +443,6 @@ with tab_stock:
 with tab_prod:
     st.subheader("🏭 Producción")
     
-    # CREAR PRODUCTO DESDE PRODUCCIÓN (Pedido por el cliente)
     with st.expander("✨ Crear Nuevo Producto (Si no existe)", expanded=False):
         c_prod_new1, c_prod_new2, c_prod_new3 = st.columns(3)
         np_cod = c_prod_new1.text_input("Código", key="np_cod")
@@ -445,14 +451,12 @@ with tab_prod:
         
         if st.button("Crear y Usar", key="btn_crear_prod"):
             if np_cod and np_nom:
-                # Carga stock actual
                 df_current = cargar_datos_stock()
                 nuevo_p = pd.DataFrame([{
                     "Codigo": np_cod, "Producto": np_nom, "Unidad": np_uni,
                     "Cantidad": 0.0, "Reservado": 0.0, 
                     "Precio Costo": 0.0, "Precio Venta": 0.0, "Stock Minimo": 0.0
                 }])
-                # Guarda
                 df_current = pd.concat([df_current, nuevo_p], ignore_index=True)
                 df_current.to_csv(STOCK_FILE, index=False)
                 st.success(f"Creado: {np_nom}")
@@ -511,17 +515,44 @@ with tab_hist:
         if venta_seleccionada:
             idx_sel = opciones_venta[opciones_venta == venta_seleccionada].index[0]
             fila_venta = df_v.loc[idx_sel]
+            
+            # BLOQUE INTELIGENTE DE RECUPERACIÓN 
             try:
-                items_recuperados = ast.literal_eval(fila_venta["Detalle"])
-                pdf_reimpresion = generar_pdf(fila_venta["Cliente"], items_recuperados, fila_venta["Total"])
+                raw_detalle = fila_venta["Detalle"]
+                # 1. Intentar convertir el texto en lista
+                try:
+                    parsed_data = ast.literal_eval(raw_detalle)
+                except:
+                    # Si falla, asumir que es texto plano viejo
+                    parsed_data = [raw_detalle]
+
+                # 2. Normalizar a formato lista de diccionarios
+                items_normalizados = []
+                if isinstance(parsed_data, list):
+                    for item in parsed_data:
+                        if isinstance(item, dict):
+                            items_normalizados.append(item)
+                        else:
+                            # Convertir string viejo a dict nuevo dummy
+                            items_normalizados.append({
+                                'Producto': str(item),
+                                'Codigo': '-',
+                                'Cantidad': 0,
+                                'Precio': 0,
+                                'Subtotal': 0
+                            })
+                
+                # 3. Generar PDF
+                pdf_reimpresion = generar_pdf(fila_venta["Cliente"], items_normalizados, fila_venta["Total"])
+                
                 st.download_button(
                     label="📄 Descargar PDF (Para Imprimir)",
                     data=pdf_reimpresion,
                     file_name=f"Copia_{fila_venta['Cliente']}.pdf",
                     mime="application/pdf"
                 )
-            except:
-                st.error("No se pudo reconstruir el detalle.")
+            except Exception as e:
+                st.error(f"Error recuperando venta: {e}")
 
         st.divider()
         st.write("📊 **Historial Completo**")
