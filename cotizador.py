@@ -7,7 +7,7 @@ from datetime import date, timedelta, datetime
 import pytz
 from fpdf import FPDF
 
-# AUTO-CONFIGURACIÓN DE TEMA
+# --- AUTO-CONFIGURACIÓN DE TEMA ---
 def configurar_tema_alambrados():
     config_dir = ".streamlit"
     config_path = os.path.join(config_dir, "config.toml")
@@ -33,13 +33,12 @@ if configurar_tema_alambrados():
     st.warning("🎨 Tema instalado. Reiniciá la app para ver los cambios.")
     st.stop()
 
-# ESTILOS CSS
+# --- ESTILOS CSS ---
 st.markdown("""
     <style>
         [data-testid="stSidebar"] img { margin-top: 20px; border-radius: 5px; border: 2px solid #D32F2F; }
         h1, h2, h3 { color: #B71C1C !important; }
         [data-testid="stMetricValue"] { color: #D32F2F; }
-        /* Botones de borrar pequeños */
         div[data-testid="column"] button {
             padding: 0px 10px;
             font-size: 12px;
@@ -48,63 +47,65 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# RUTAS Y ARCHIVOS
+# --- RUTAS Y ARCHIVOS ---
 STOCK_FILE = "stock_del_carmen.csv"
 GASTOS_FILE = "gastos_del_carmen.csv"
 VENTAS_FILE = "ventas_del_carmen.csv"
 PRODUCCION_FILE = "produccion_del_carmen.csv"
 LOGO_FILE = "alambrados.jpeg"
 
-# LISTA COMPLETA DE PRODUCTOS
+# --- LISTA BASE (SOLO SE USA SI NO EXISTE EL ARCHIVO) ---
 PRODUCTOS_INICIALES = [
-    {"Codigo": "3", "Producto": "ADICIONAL PINCHES 20.000", "Unidad": "un."},
-    {"Codigo": "6", "Producto": "BOYERITO IMPORTADO X 1000", "Unidad": "un."},
-    {"Codigo": "3", "Producto": "CONCERTINA DOBLE CRUZADA X 45", "Unidad": "un."},
-    {"Codigo": "2", "Producto": "CONCERTINA SIMPLE", "Unidad": "un."},
-    {"Codigo": "1", "Producto": "DECO 1.50", "Unidad": "un."},
-    {"Codigo": "0", "Producto": "DECO 1.80", "Unidad": "un."},
-    {"Codigo": "3", "Producto": "ESPARRAGOS", "Unidad": "un."},
-    {"Codigo": "25", "Producto": "ESQUINERO OLIMPICO", "Unidad": "un."},
-    {"Codigo": "2", "Producto": "ESQUINERO RECTO", "Unidad": "un."},
-    {"Codigo": "15", "Producto": "GALVA 14 X KILO", "Unidad": "kg"},
-    {"Codigo": "5", "Producto": "GALVA 18", "Unidad": "kg"},
-    {"Codigo": "31", "Producto": "GANCHOS ESTIRATEJIDOS 5/16", "Unidad": "un."},
-    {"Codigo": "15", "Producto": "OVALADO X MAYOR X 1000", "Unidad": "un."},
-    {"Codigo": "32", "Producto": "PALOMITAS", "Unidad": "un."},
-    {"Codigo": "24", "Producto": "PINCHES X METRO PINCHOSOS", "Unidad": "m"},
-    {"Codigo": "41", "Producto": "PLANCHUELA 1.00", "Unidad": "un."},
-    {"Codigo": "40", "Producto": "PLANCHUELA 1.20", "Unidad": "un."},
-    {"Codigo": "35", "Producto": "PLANCHUELA 1.50", "Unidad": "un."},
-    {"Codigo": "34", "Producto": "PLANCHUELA 2.00", "Unidad": "un."},
-    {"Codigo": "47", "Producto": "PORTON 3.00 X 1.80 BLACK", "Unidad": "un."},
-    {"Codigo": "9", "Producto": "PORTON DE CANO X 4.00", "Unidad": "un."},
-    {"Codigo": "10", "Producto": "PORTON INDUSTRIAL X 4.00", "Unidad": "un."},
-    {"Codigo": "51", "Producto": "PORTON LIVIANO 1.80 X 3.00 CANO", "Unidad": "un."},
-    {"Codigo": "53", "Producto": "PORTON LIVIANO 1.80X 3.00", "Unidad": "un."},
-    {"Codigo": "11", "Producto": "PORTON SIMPLE X 3.00", "Unidad": "un."},
-    {"Codigo": "54", "Producto": "POSTE DE MADERA", "Unidad": "un."},
-    {"Codigo": "27", "Producto": "POSTE OLIMPICO", "Unidad": "un."},
-    {"Codigo": "28", "Producto": "POSTE RECTO", "Unidad": "un."},
-    {"Codigo": "57", "Producto": "POSTE REDONDE ECO OBRA", "Unidad": "un."},
-    {"Codigo": "14", "Producto": "PUA X MAYOR X500", "Unidad": "un."},
-    {"Codigo": "43", "Producto": "PUA X METRO", "Unidad": "m"},
-    {"Codigo": "16", "Producto": "PUERTITA CLASICA 1.50", "Unidad": "un."},
-    {"Codigo": "12", "Producto": "PUERTITA CORAZON 1.5 X 1.00", "Unidad": "un."},
-    {"Codigo": "13", "Producto": "PUERTITA CRUZ REFORZADA 2.00 X 1.00", "Unidad": "un."},
-    {"Codigo": "7", "Producto": "PUERTITA LIVINA 1.00 X 1.80", "Unidad": "un."},
-    {"Codigo": "P", "Producto": "PUNTAL", "Unidad": "un."},
-    {"Codigo": "R16", "Producto": "RECOCIDO 16", "Unidad": "kg"},
-    {"Codigo": "REF", "Producto": "REFUERZO", "Unidad": "un."},
-    {"Codigo": "55", "Producto": "TEJIDO 1.50", "Unidad": "m"},
-    {"Codigo": "19", "Producto": "TEJIDO 2.00 X METRO", "Unidad": "m"},
-    {"Codigo": "59", "Producto": "TEJIDO DE OBRA 1.50", "Unidad": "m"},
-    {"Codigo": "63", "Producto": "TEJIDO DE OBRA 1.80", "Unidad": "m"},
-    {"Codigo": "50", "Producto": "TEJIDO DEL 12 - 2 PULGADAS", "Unidad": "m"},
-    {"Codigo": "18", "Producto": "TEJIDO RECU 1.8", "Unidad": "m"},
-    {"Codigo": "TR", "Producto": "TEJIDO ROMBITO 2 PULGADAS", "Unidad": "m"}
+    {'Codigo': '97', 'Producto': 'ADICIONAL PINCHES 20.000', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '6', 'Producto': 'BOYERITO IMPORTADO X 1000', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '3', 'Producto': 'CONCERTINA DOBLE CRUZADA X 45', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '2', 'Producto': 'CONCERTINA SIMPLE', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '11', 'Producto': 'DECO 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '0', 'Producto': 'DECO 1.80', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '33', 'Producto': 'ESPARRAGOS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '25', 'Producto': 'ESQUINERO OLIMPICO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 18000, 'Precio Venta': 39000, 'Stock Minimo': 0},
+    {'Codigo': '2', 'Producto': 'ESQUINERO RECTO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 32000, 'Stock Minimo': 0},
+    {'Codigo': '15', 'Producto': 'GALVA 14 X KILO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'kg', 'Precio Costo': 0, 'Precio Venta': 6800, 'Stock Minimo': 0},
+    {'Codigo': '5', 'Producto': 'GALVA 18', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'kg', 'Precio Costo': 0, 'Precio Venta': 11900, 'Stock Minimo': 0},
+    {'Codigo': '31', 'Producto': 'GANCHOS ESTIRATEJIDOS 5/16', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 2100, 'Stock Minimo': 0},
+    {'Codigo': '15', 'Producto': 'OVALADO X MAYOR X 1000', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 290000, 'Stock Minimo': 0},
+    {'Codigo': '32', 'Producto': 'PALOMITAS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 2100, 'Stock Minimo': 0},
+    {'Codigo': '24', 'Producto': 'PINCHES X METRO PINCHOSOS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '41', 'Producto': 'PLANCHUELA 1.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 4800, 'Stock Minimo': 0},
+    {'Codigo': '40', 'Producto': 'PLANCHUELA 1.20', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 5100, 'Stock Minimo': 0},
+    {'Codigo': '35', 'Producto': 'PLANCHUELA 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 5800, 'Stock Minimo': 0},
+    {'Codigo': '34', 'Producto': 'PLANCHUELA 2.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 7999, 'Stock Minimo': 0},
+    {'Codigo': '47', 'Producto': 'PORTON 3.00 X 1.80 BLACK', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 360000, 'Stock Minimo': 0},
+    {'Codigo': '9', 'Producto': 'PORTON DE CANO X 4.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 3600000, 'Stock Minimo': 0},
+    {'Codigo': '10', 'Producto': 'PORTON INDUSTRIAL X 4.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 499999, 'Stock Minimo': 0},
+    {'Codigo': '51', 'Producto': 'PORTON LIVIANO 1.80 X 3.00 CANO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 260000, 'Stock Minimo': 0},
+    {'Codigo': '53', 'Producto': 'PORTON LIVIANO 1.80X 3.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '11', 'Producto': 'PORTON SIMPLE X 3.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '54', 'Producto': 'POSTE DE MADERA', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 15000, 'Stock Minimo': 0},
+    {'Codigo': '27', 'Producto': 'POSTE OLIMPICO', 'Cantidad': 10, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 17999, 'Stock Minimo': 0},
+    {'Codigo': '28', 'Producto': 'POSTE RECTO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 16999, 'Stock Minimo': 0},
+    {'Codigo': '57', 'Producto': 'POSTE REDONDE ECO OBRA', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 15000, 'Stock Minimo': 0},
+    {'Codigo': '14', 'Producto': 'PUA X MAYOR X500', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '43', 'Producto': 'PUA X METRO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 550, 'Stock Minimo': 0},
+    {'Codigo': '16', 'Producto': 'PUERTITA CLASICA 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 1589000, 'Stock Minimo': 0},
+    {'Codigo': '12', 'Producto': 'PUERTITA CORAZON 1.5 X 1.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 162800, 'Stock Minimo': 0},
+    {'Codigo': '13', 'Producto': 'PUERTITA CRUZ REFORZADA 2.00 X 1.00', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 199800, 'Stock Minimo': 0},
+    {'Codigo': '7', 'Producto': 'PUERTITA LIVINA 1.00 X 1.80', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 125300, 'Stock Minimo': 0},
+    {'Codigo': '26', 'Producto': 'PUNTAL', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 13900, 'Stock Minimo': 0},
+    {'Codigo': 'R16', 'Producto': 'RECOCIDO 16', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'kg', 'Precio Costo': 0, 'Precio Venta': 4900, 'Stock Minimo': 0},
+    {'Codigo': 'REF', 'Producto': 'REFUERZO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 39000, 'Stock Minimo': 0},
+    {'Codigo': '55', 'Producto': 'TEJIDO 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 59000, 'Stock Minimo': 0},
+    {'Codigo': '19', 'Producto': 'TEJIDO 2.00 X METRO', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 74999, 'Stock Minimo': 0},
+    {'Codigo': '59', 'Producto': 'TEJIDO DE OBRA 1.50', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '63', 'Producto': 'TEJIDO DE OBRA 1.80', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '50', 'Producto': 'TEJIDO DEL 12 - 2 PULGADAS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '18', 'Producto': 'TEJIDO RECU 1.8', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 0, 'Stock Minimo': 0},
+    {'Codigo': '39', 'Producto': 'TEJIDO ROMBITO 2 PULGADAS', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'm', 'Precio Costo': 0, 'Precio Venta': 69999, 'Stock Minimo': 0},
+    {'Codigo': '29', 'Producto': 'Torniquete', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 1999, 'Precio Venta': 3500, 'Stock Minimo': 0},
+    {'Codigo': '1', 'Producto': 'liso', 'Cantidad': 0, 'Reservado': 0, 'Unidad': 'un.', 'Precio Costo': 0, 'Precio Venta': 360, 'Stock Minimo': 0}
 ]
 
-# FUNCIONES
+# --- FUNCIONES ---
 def ahora_arg():
     try: return datetime.now(pytz.timezone('America/Argentina/Buenos_Aires'))
     except: return datetime.now()
@@ -116,35 +117,48 @@ def generar_excel(df):
     return output.getvalue()
 
 def cargar_datos_stock():
-    crear_nuevo = False
-    if not os.path.exists(STOCK_FILE):
-        crear_nuevo = True
-    else:
-        try:
-            df_check = pd.read_csv(STOCK_FILE)
-            if df_check.empty or len(df_check) < 2:
-                crear_nuevo = True
-        except: crear_nuevo = True
-
-    if crear_nuevo:
-        df_init = pd.DataFrame(PRODUCTOS_INICIALES)
-        for col in ["Cantidad", "Reservado", "Precio Costo", "Precio Venta", "Stock Minimo"]:
-            if col not in df_init.columns: df_init[col] = 0.0
-        df_init.to_csv(STOCK_FILE, index=False)
+    # --- LOGICA DE PERSISTENCIA SAGRADA ---
     
-    df = pd.read_csv(STOCK_FILE)
+    # 1. Si NO existe el archivo, se crea de cero con la lista base
+    if not os.path.exists(STOCK_FILE):
+        df_init = pd.DataFrame(PRODUCTOS_INICIALES)
+        df_init.to_csv(STOCK_FILE, index=False)
+        return df_init
+    
+    # 2. Si existe, SE RESPETA. Solo se repara si faltan columnas.
+    try:
+        df = pd.read_csv(STOCK_FILE)
+    except Exception as e:
+        st.error(f"Error crítico leyendo base de datos: {e}")
+        return pd.DataFrame() # Devolver vacío para no romper, pero avisar
+
+    # 3. Mantenimiento Quirúrgico: Agregar columnas faltantes SIN borrar filas
+    cols_necesarias = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
+    cambio_estructura = False
+    
+    for col in cols_necesarias:
+        if col not in df.columns:
+            df[col] = 0.0 # Se agrega la columna en 0, pero se mantienen las otras
+            cambio_estructura = True
+    
+    # 4. Limpieza de tipos (Para que no falle el visualizador)
     df["Codigo"] = df["Codigo"].fillna("").astype(str)
     df["Producto"] = df["Producto"].fillna("").astype(str)
     df["Unidad"] = df["Unidad"].fillna("un.").astype(str)
     for col in ["Cantidad", "Reservado", "Precio Costo", "Precio Venta", "Stock Minimo"]:
         if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+    
+    # Solo si hubo cambios de estructura (columnas nuevas), guardamos el ajuste
+    if cambio_estructura:
+        df.to_csv(STOCK_FILE, index=False)
+        
     return df
 
 def cargar_datos_general(archivo, cols):
     if not os.path.exists(archivo): return pd.DataFrame(columns=cols)
     return pd.read_csv(archivo)
 
-# PDF
+# --- PDF ---
 class PDF(FPDF):
     def header(self):
         if os.path.exists(LOGO_FILE):
@@ -165,15 +179,12 @@ def generar_pdf(cliente, items, total, tipo_venta=""):
     pdf = PDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    # Si viene con hora, usarla, sino usar ahora
-    fecha_impresion = ahora_arg().strftime("%d/%m/%Y %H:%M")
+    fecha_hora = ahora_arg().strftime("%d/%m/%Y %H:%M")
     
     pdf.cell(200, 10, txt=f"Cliente: {cliente}", ln=True)
-    pdf.cell(200, 10, txt=f"Fecha Impresion: {fecha_impresion}", ln=True)
-    if tipo_venta: 
-        pass 
-        
+    pdf.cell(200, 10, txt=f"Fecha: {fecha_hora}", ln=True)
     pdf.ln(10)
+    
     pdf.set_fill_color(211, 47, 47) 
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Arial", 'B', 10)
@@ -186,7 +197,6 @@ def generar_pdf(cliente, items, total, tipo_venta=""):
     pdf.set_font("Arial", size=10)
     
     for item in items:
-        # Asegurar que los datos existan para evitar error en historial viejo
         cod = str(item.get('Codigo', ''))
         prod = str(item.get('Producto', ''))
         cant = item.get('Cantidad', 0)
@@ -206,7 +216,6 @@ def generar_pdf(cliente, items, total, tipo_venta=""):
     pdf.set_text_color(183, 28, 28)
     pdf.cell(30, 10, f"${total:,.0f}", 0, 1)
     
-    # DISCLAIMER LEGAL
     pdf.ln(20)
     pdf.set_font("Arial", 'I', 8)
     pdf.set_text_color(80, 80, 80)
@@ -218,7 +227,7 @@ def generar_pdf(cliente, items, total, tipo_venta=""):
 if 'carrito' not in st.session_state: st.session_state.carrito = []
 if 'input_key' not in st.session_state: st.session_state.input_key = 0
 
-# BARRA LATERAL
+# --- BARRA LATERAL ---
 with st.sidebar:
     if os.path.exists(LOGO_FILE): st.image(LOGO_FILE, use_container_width=True)
     else: st.title("AC")
@@ -231,14 +240,14 @@ with st.sidebar:
              st.success("Reiniciando...")
              st.rerun()
 
-# INTERFAZ
+# --- INTERFAZ PRINCIPAL ---
 st.title("Gestión Comercial")
 tab_cot, tab_stock, tab_prod, tab_hist = st.tabs(["📝 Cotizador", "💰 Stock y Costos", "🏭 Producción", "📊 Historial"])
 
 # 1. COTIZADOR
 with tab_cot:
     df_s = cargar_datos_stock()
-    if df_s.empty: st.error("⚠️ Base vacía.")
+    if df_s.empty: st.error("⚠️ Base de datos no encontrada.")
     else:
         if "Reservado" not in df_s.columns: df_s["Reservado"] = 0.0
         df_s["DISPONIBLE"] = df_s["Cantidad"] - df_s["Reservado"]
@@ -246,14 +255,13 @@ with tab_cot:
         col_izq, col_der = st.columns([1, 1])
         with col_izq:
             st.subheader("1. Carga de Productos")
-            cliente = st.text_input("Nombre del Cliente")
+            cliente = st.text_input("Nombre del Cliente", placeholder="Ej: Juan Perez")
             st.write("---")
             
             modo_carga = st.radio("Método de Carga:", ["⚡ Carga Rápida (Por Código)", "🔍 Buscador (Por Nombre)"], horizontal=True)
             
             if modo_carga == "⚡ Carga Rápida (Por Código)":
-                st.info("Ingresá los códigos. Tabla de 12 filas fija.")
-                # Tabla fija de 12 filas vacías
+                st.info("Ingresá los códigos. Tabla de 12 filas.")
                 df_input_template = pd.DataFrame([{"Codigo": "", "Cantidad": 1.0}] * 12)
                 
                 edited_input = st.data_editor(
@@ -336,7 +344,7 @@ with tab_cot:
                 tipo = st.radio("Destino:", ["Entrega Inmediata", "Dejar en Acopio"], horizontal=True, label_visibility="collapsed")
                 
                 c_pdf, c_ok = st.columns(2)
-                pdf_bytes = generar_pdf(cliente, st.session_state.carrito, total)
+                pdf_bytes = generar_pdf(cliente, st.session_state.carrito, total, tipo)
                 c_pdf.download_button("📄 Presupuesto", pdf_bytes, f"P_{cliente}.pdf", "application/pdf", use_container_width=True)
                 
                 if c_ok.button("✅ CONFIRMAR VENTA", type="primary", use_container_width=True):
@@ -348,20 +356,16 @@ with tab_cot:
                             else: df_s.at[i, "Cantidad"] -= item["Cantidad"]
                     df_s.to_csv(STOCK_FILE, index=False)
                     
-                    # GUARDADO INTELIGENTE (JSON) PARA REIMPRIMIR
-                    # Guardamos la lista de objetos completa como string
                     detalle_completo = str(st.session_state.carrito)
-                    
                     nuevo = pd.DataFrame([{
                         "Fecha": ahora_arg().strftime("%d/%m/%Y %H:%M"), 
                         "Cliente": cliente, "Total": total, "Tipo": tipo,
-                        "Detalle": detalle_completo # Guardamos TODO el detalle
+                        "Detalle": detalle_completo
                     }])
                     hist = cargar_datos_general(VENTAS_FILE, ["Fecha","Cliente","Total","Tipo","Detalle"])
                     pd.concat([hist, nuevo]).to_csv(VENTAS_FILE, index=False)
                     st.session_state.carrito = []
                     st.success("¡Venta Exitosa!")
-                    st.balloons()
                     st.rerun()
             else: st.info("Carrito vacío.")
 
@@ -428,6 +432,10 @@ with tab_stock:
     )
     if c_save.button("💾 GUARDAR CAMBIOS MASIVOS", type="primary"):
         cols_to_save = ["Codigo", "Producto", "Cantidad", "Reservado", "Unidad", "Precio Costo", "Precio Venta", "Stock Minimo"]
+        # Nos aseguramos que las columnas existan
+        for col in cols_to_save:
+            if col not in df_edit.columns: df_edit[col] = 0
+        
         df_final = df_edit[cols_to_save] 
         df_final.to_csv(STOCK_FILE, index=False)
         st.success("Guardado.")
@@ -474,34 +482,23 @@ with tab_prod:
                             st.rerun()
                 else: c_txt.info(f"⏳ Faltan {falta} días para {row['Producto']}")
 
-# 4. HISTORIAL 
+# 4. HISTORIAL
 with tab_hist:
     st.subheader("Registro de Ventas y Reimpresión")
     df_v = cargar_datos_general(VENTAS_FILE, ["Fecha","Cliente","Total","Tipo","Detalle"])
     
     if not df_v.empty:
-        # Ordenar por fecha reciente
         df_v = df_v.sort_index(ascending=False)
-        
-        # SECTOR DE REIMPRESIÓN 
         st.write("🖨️ **Reimprimir Comprobante**")
-        # Crea una lista amigable para seleccionar
         opciones_venta = df_v.apply(lambda x: f"{x['Fecha']} | {x['Cliente']} | Total: ${x['Total']:,.0f}", axis=1)
         venta_seleccionada = st.selectbox("Seleccionar Venta:", opciones_venta)
         
         if venta_seleccionada:
-            # Encontrar la fila original
             idx_sel = opciones_venta[opciones_venta == venta_seleccionada].index[0]
             fila_venta = df_v.loc[idx_sel]
-            
-            # Reconstruir datos para el PDF
             try:
-                # MAGIA: Convierte el texto guardado 
                 items_recuperados = ast.literal_eval(fila_venta["Detalle"])
-                
-                # Generar PDF
                 pdf_reimpresion = generar_pdf(fila_venta["Cliente"], items_recuperados, fila_venta["Total"])
-                
                 st.download_button(
                     label="📄 Descargar PDF de esta venta",
                     data=pdf_reimpresion,
@@ -509,7 +506,7 @@ with tab_hist:
                     mime="application/pdf"
                 )
             except:
-                st.error("No se pudo reconstruir el detalle de esta venta (Formato antiguo).")
+                st.error("No se pudo reconstruir el detalle de esta venta.")
 
         st.divider()
         st.write("📊 **Tabla de Datos**")
