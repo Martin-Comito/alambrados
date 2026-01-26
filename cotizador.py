@@ -8,6 +8,22 @@ from datetime import date, timedelta, datetime
 import pytz
 from fpdf import FPDF
 
+# OCULTAR MENU Y HEADER DE STREAMLIT
+st.markdown("""
+    <style>
+        /* Ocultar el menú de hamburguesa (tres rayitas) */
+        #MainMenu {visibility: hidden;}
+        
+        /* Ocultar el pie de página "Made with Streamlit" */
+        footer {visibility: hidden;}
+        
+        /* Ocultar la barra superior (Header) donde está "Share" y "Star" */
+        header {visibility: hidden;}
+        
+        /* Opcional: Ocultar el botón de "Deploy" si aparece */
+        .stAppDeployButton {display:none;}
+    </style>
+""", unsafe_allow_html=True)
 # AUTO-CONFIGURACIÓN DE TEMA
 def configurar_tema_alambrados():
     config_dir = ".streamlit"
@@ -559,3 +575,4 @@ with tab_hist:
         st.dataframe(df_v, use_container_width=True)
     else:
         st.info("No hay ventas registradas aún.")
+
